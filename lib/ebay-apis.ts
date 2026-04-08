@@ -1,6 +1,6 @@
 export type EbayEnvironment = "sandbox" | "production";
 export type ApiFamilyId = "account" | "inventory" | "taxonomy" | "fulfillment";
-export type ApiFieldLocation = "path" | "query";
+export type ApiFieldLocation = "path" | "query" | "body";
 export type ApiFieldType = "text" | "textarea" | "number";
 
 export type EnvironmentConfig = {
@@ -9,6 +9,7 @@ export type EnvironmentConfig = {
   devId: string;
   certId: string;
   userAccessToken: string;
+  requestLocale: string;
   oauthUserScopes: string;
   oauthAuthorizeUrlBase: string;
 };
@@ -31,7 +32,7 @@ export type ApiCallDefinition = {
   summary: string;
   docsUrl: string;
   path: string;
-  method: "GET";
+  method: "GET" | "POST";
   sandboxSupported: boolean;
   requiredScopes: string[];
   notes?: string[];
@@ -49,6 +50,7 @@ export const DEFAULT_ENVIRONMENT_CONFIG: EnvironmentConfig = {
   devId: "",
   certId: "",
   userAccessToken: "",
+  requestLocale: "en-US",
   oauthUserScopes: "",
   oauthAuthorizeUrlBase: "https://auth.ebay.com/oauth2/authorize",
 };
@@ -237,6 +239,35 @@ export const API_CALLS: ApiCallDefinition[] = [
         defaultValue: "0",
         placeholder: "0",
         description: "How many offers to skip before the page starts.",
+      },
+    ],
+  },
+  {
+    id: "inventory-bulk-migrate-listing",
+    apiFamily: "inventory",
+    title: "bulkMigrateListing",
+    summary:
+      "Convert up to five eligible active eBay listings into Inventory API objects so they can be managed and retrieved through Inventory and Offer calls.",
+    docsUrl:
+      "https://developer.ebay.com/api-docs/sell/inventory/resources/listing/methods/bulkMigrateListing",
+    path: "/sell/inventory/v1/bulk_migrate_listing",
+    method: "POST",
+    sandboxSupported: true,
+    requiredScopes: ["https://api.ebay.com/oauth/api_scope/sell.inventory"],
+    notes: [
+      "Use this when getInventoryItems returns zero but you still have active listings created outside the Inventory API model.",
+      "Per eBay's docs, eligible listings must be fixed-price, use business policies, and have seller-defined SKU values.",
+    ],
+    fields: [
+      {
+        key: "listingIds",
+        label: "Listing IDs",
+        location: "body",
+        type: "textarea",
+        required: true,
+        placeholder: "123456789012\n123456789013",
+        description:
+          "Enter one to five active eBay listing IDs, separated by commas, spaces, or new lines.",
       },
     ],
   },
@@ -589,4 +620,30 @@ export function buildRequestUrl(
   }
 
   return url;
+}
+
+export function buildRequestBody(
+  call: ApiCallDefinition,
+  params: Record<string, string>,
+) {
+  if (call.id === "inventory-bulk-migrate-listing") {
+    const listingIds = (params.listingIds ?? "")
+      .split(/[\s,]+/)
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .slice(0, 5);
+
+    return {
+      requests: listingIds.map((listingId) => ({ listingId })),
+    };
+  }
+
+  const bodyFields = call.fields.filter((field) => field.location === "body");
+  if (bodyFields.length === 0) {
+    return undefined;
+  }
+
+  return Object.fromEntries(
+    bodyFields.map((field) => [field.key, params[field.key]?.trim() ?? ""]),
+  );
 }

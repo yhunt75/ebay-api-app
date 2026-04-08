@@ -28,6 +28,11 @@ type ResponseState = {
   body: string;
 };
 
+type AlertState = {
+  title: string;
+  detail?: string;
+};
+
 function findFamilyCall(familyId: ApiFamilyId) {
   return API_CALLS.find((call) => call.apiFamily === familyId) ?? API_CALLS[0];
 }
@@ -86,6 +91,10 @@ function parseEnvFile(contents: string) {
       case "USER_ACCESS_TOKEN":
       case "EBAY_USER_ACCESS_TOKEN":
         nextConfig.userAccessToken = value;
+        break;
+      case "REQUEST_LOCALE":
+      case "ACCEPT_LANGUAGE":
+        nextConfig.requestLocale = value;
         break;
       case "OAUTH_USER_SCOPES":
         nextConfig.oauthUserScopes = value;
@@ -146,8 +155,8 @@ export function EbayWorkbench() {
     getCallDefaults(findFamilyCall("inventory")),
   );
   const [responseState, setResponseState] = useState<ResponseState | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [errorAlert, setErrorAlert] = useState<AlertState | null>(null);
+  const [noticeAlert, setNoticeAlert] = useState<AlertState | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDraggingEnvFile, setIsDraggingEnvFile] = useState(false);
 
@@ -156,6 +165,12 @@ export function EbayWorkbench() {
     availableCalls.find((call) => call.id === selectedCallId) ?? availableCalls[0];
   const selectedFamily =
     API_FAMILIES.find((family) => family.id === selectedApi) ?? API_FAMILIES[0];
+  const environmentBadgeLabel =
+    config.environment === "sandbox"
+      ? selectedCall.sandboxSupported
+        ? "Sandbox selected"
+        : "Sandbox unsupported"
+      : "Production selected";
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -195,14 +210,14 @@ export function EbayWorkbench() {
       setSelectedCallId(fallback.id);
       setCallValues(getCallDefaults(fallback));
       setResponseState(null);
-      setErrorMessage(null);
+      setErrorAlert(null);
     }
   }, [availableCalls, selectedCallId]);
 
   useEffect(() => {
     setCallValues(getCallDefaults(selectedCall));
     setResponseState(null);
-    setErrorMessage(null);
+    setErrorAlert(null);
   }, [selectedCall]);
 
   function updateConfig<K extends keyof EnvironmentConfig>(
@@ -235,8 +250,10 @@ export function EbayWorkbench() {
       ...parsed,
       environment: parsed.environment ?? current.environment,
     }));
-    setNotice(`Loaded credentials from ${file.name} into this browser session.`);
-    setErrorMessage(null);
+    setNoticeAlert({
+      title: `Loaded credentials from ${file.name} into this browser session.`,
+    });
+    setErrorAlert(null);
   }
 
   async function handleEnvUpload(event: ChangeEvent<HTMLInputElement>) {
@@ -274,7 +291,7 @@ export function EbayWorkbench() {
   function resetApiSection() {
     setCallValues(getCallDefaults(selectedCall));
     setResponseState(null);
-    setErrorMessage(null);
+    setErrorAlert(null);
   }
 
   async function copyResponse() {
@@ -283,14 +300,16 @@ export function EbayWorkbench() {
     }
 
     await navigator.clipboard.writeText(responseState.body);
-    setNotice("Copied the current JSON response to the clipboard.");
+    setNoticeAlert({
+      title: "Copied the current JSON response to the clipboard.",
+    });
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsSubmitting(true);
-    setErrorMessage(null);
-    setNotice(null);
+    setErrorAlert(null);
+    setNoticeAlert(null);
 
     try {
       const response = await fetch("/api/ebay", {
@@ -316,6 +335,11 @@ export function EbayWorkbench() {
           };
 
       if ("error" in payload) {
+        const detailParts = [
+          payload.requestUrl ? `Request URL: ${payload.requestUrl}` : undefined,
+          JSON.stringify(payload, null, 2),
+        ].filter(Boolean);
+
         setResponseState({
           ok: false,
           status: response.status,
@@ -323,7 +347,10 @@ export function EbayWorkbench() {
           requestUrl: payload.requestUrl,
           body: JSON.stringify(payload, null, 2),
         });
-        setErrorMessage(payload.error);
+        setErrorAlert({
+          title: payload.error,
+          detail: detailParts.join("\n\n"),
+        });
         return;
       }
 
@@ -335,16 +362,40 @@ export function EbayWorkbench() {
         body: JSON.stringify(payload, null, 2),
       });
 
+      if (
+        selectedCall.id === "inventory-get-items" &&
+        response.ok &&
+        typeof payload.data === "object" &&
+        payload.data !== null &&
+        "total" in payload.data &&
+        payload.data.total === 0
+      ) {
+        setNoticeAlert({
+          title:
+            "eBay returned zero Inventory API records for this seller account.",
+          detail:
+            "Active listings created outside the Inventory API model will not appear here until they are migrated with bulkMigrateListing.\n\nListings with Out-of-Stock control can remain active once they are Inventory API-managed.\n\nResponse:\n" +
+            JSON.stringify(payload.data, null, 2),
+        });
+      }
+
       if (!response.ok) {
-        setErrorMessage("The eBay API returned an error response. Full details are shown below.");
+        setErrorAlert({
+          title: `The eBay API returned ${payload.status} ${payload.statusText}.`,
+          detail:
+            `Request URL: ${payload.requestUrl}\n\n` +
+            JSON.stringify(payload.data, null, 2),
+        });
       }
     } catch (error) {
       setResponseState(null);
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "Unable to submit the eBay request from the browser.",
-      );
+      setErrorAlert({
+        title: "Unable to submit the eBay request from the browser.",
+        detail:
+          error instanceof Error
+            ? error.message
+            : "An unknown browser or network error occurred.",
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -482,6 +533,17 @@ export function EbayWorkbench() {
                 />
               </label>
 
+              <label className="field">
+                <span>REQUEST_LOCALE</span>
+                <input
+                  className="input"
+                  value={config.requestLocale}
+                  placeholder="en-US"
+                  spellCheck={false}
+                  onChange={(event) => updateConfig("requestLocale", event.target.value)}
+                />
+              </label>
+
               <label className="field field--wide">
                 <span>OAUTH_USER_SCOPES</span>
                 <textarea
@@ -510,7 +572,7 @@ export function EbayWorkbench() {
             <p className="microcopy">
               APP_ID, Dev_ID, and Cert_ID are preserved for the browser session so the user can
               swap calls without re-entering them. The live REST requests in this workbench use
-              the provided OAuth bearer token.
+              the provided OAuth bearer token and a valid locale header such as <code>en-US</code>.
             </p>
           </div>
 
@@ -584,12 +646,14 @@ export function EbayWorkbench() {
                     </div>
                     <span
                       className={`support-pill ${
-                        selectedCall.sandboxSupported
+                        config.environment === "sandbox" && !selectedCall.sandboxSupported
+                          ? "support-pill--restricted"
+                          : selectedCall.sandboxSupported
                           ? "support-pill--supported"
                           : "support-pill--restricted"
                       }`}
                     >
-                      {selectedCall.sandboxSupported ? "Sandbox ready" : "Production only"}
+                      {environmentBadgeLabel}
                     </span>
                   </div>
 
@@ -713,10 +777,20 @@ export function EbayWorkbench() {
             )}
           </div>
 
-          {(errorMessage || notice) && (
+          {(errorAlert || noticeAlert) && (
             <div className="panel alert-panel" aria-live="polite">
-              {errorMessage && <p className="alert alert--error">{errorMessage}</p>}
-              {notice && <p className="alert alert--notice">{notice}</p>}
+              {errorAlert && (
+                <div className="alert alert--error">
+                  <strong>{errorAlert.title}</strong>
+                  {errorAlert.detail ? <pre>{errorAlert.detail}</pre> : null}
+                </div>
+              )}
+              {noticeAlert && (
+                <div className="alert alert--notice">
+                  <strong>{noticeAlert.title}</strong>
+                  {noticeAlert.detail ? <pre>{noticeAlert.detail}</pre> : null}
+                </div>
+              )}
             </div>
           )}
         </aside>

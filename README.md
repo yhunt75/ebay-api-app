@@ -10,7 +10,7 @@ A Next.js App Router app for exploring core seller-facing eBay APIs from one UI:
 The interface lets a user:
 
 - choose `sandbox` or `production`
-- paste their `APP_ID`, `Dev_ID`, `Cert_ID`, `USER_ACCESS_TOKEN`, `OAUTH_USER_SCOPES`, and `OAUTH_AUTHORIZE_URL_BASE`
+- paste their `APP_ID`, `Dev_ID`, `Cert_ID`, `USER_ACCESS_TOKEN`, `REQUEST_LOCALE`, `OAUTH_USER_SCOPES`, and `OAUTH_AUTHORIZE_URL_BASE`
 - optionally upload a `.env` file to populate those values
 - select a documented API call from a dropdown
 - fill in the required method inputs
@@ -33,6 +33,7 @@ The interface lets a user:
 - `getInventoryItems`
 - `getInventoryLocations`
 - `getOffers`
+- `bulkMigrateListing`
 
 ### Taxonomy API
 
@@ -73,7 +74,8 @@ APP_ID=
 DEV_ID=
 CERT_ID=
 USER_ACCESS_TOKEN=
-OAUTH_USER_SCOPES=
+REQUEST_LOCALE=en-US
+OAUTH_USER_SCOPES="https://api.ebay.com/oauth/api_scope/sell.inventory.readonly https://api.ebay.com/oauth/api_scope/sell.account.readonly"
 OAUTH_AUTHORIZE_URL_BASE=https://auth.ebay.com/oauth2/authorize
 ```
 

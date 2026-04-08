@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import {
+  buildRequestBody,
   buildRequestUrl,
   getCallDefinition,
   type EnvironmentConfig,
@@ -39,6 +40,13 @@ export async function POST(request: NextRequest) {
     return errorResponse("A USER_ACCESS_TOKEN is required to call the eBay APIs.");
   }
 
+  const requestLocale = config.requestLocale?.trim() || "en-US";
+  if (!/^[a-z]{2}-[A-Z]{2}$/.test(requestLocale)) {
+    return errorResponse(
+      "REQUEST_LOCALE must be a valid locale like en-US or fr-CA.",
+    );
+  }
+
   if (config.environment === "sandbox" && !call.sandboxSupported) {
     return errorResponse(
       `${call.title} is documented by eBay as unsupported in Sandbox.`,
@@ -54,6 +62,7 @@ export async function POST(request: NextRequest) {
   }
 
   const requestUrl = buildRequestUrl(call, config.environment, params);
+  const requestBody = buildRequestBody(call, params);
 
   try {
     const ebayResponse = await fetch(requestUrl, {
@@ -61,7 +70,11 @@ export async function POST(request: NextRequest) {
       headers: {
         Accept: "application/json",
         Authorization: `Bearer ${config.userAccessToken.trim()}`,
+        "Accept-Language": requestLocale,
+        "Content-Language": requestLocale,
+        ...(call.method === "POST" ? { "Content-Type": "application/json" } : {}),
       },
+      body: call.method === "POST" ? JSON.stringify(requestBody) : undefined,
       cache: "no-store",
     });
 
