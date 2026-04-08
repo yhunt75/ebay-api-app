@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+import {
+  useEffect,
+  useState,
+  type ChangeEvent,
+  type DragEvent,
+  type FormEvent,
+} from "react";
 
 import {
   API_CALLS,
@@ -143,6 +149,7 @@ export function EbayWorkbench() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDraggingEnvFile, setIsDraggingEnvFile] = useState(false);
 
   const availableCalls = API_CALLS.filter((call) => call.apiFamily === selectedApi);
   const selectedCall =
@@ -213,8 +220,7 @@ export function EbayWorkbench() {
     }));
   }
 
-  async function handleEnvUpload(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+  async function loadEnvFile(file: File) {
     if (!file) {
       return;
     }
@@ -228,7 +234,39 @@ export function EbayWorkbench() {
       environment: parsed.environment ?? current.environment,
     }));
     setNotice(`Loaded credentials from ${file.name} into this browser session.`);
+    setErrorMessage(null);
+  }
+
+  async function handleEnvUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    await loadEnvFile(file);
     event.target.value = "";
+  }
+
+  function handleEnvDragOver(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+    setIsDraggingEnvFile(true);
+  }
+
+  function handleEnvDragLeave(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+    setIsDraggingEnvFile(false);
+  }
+
+  async function handleEnvDrop(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+    setIsDraggingEnvFile(false);
+
+    const file = event.dataTransfer.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    await loadEnvFile(file);
   }
 
   function resetApiSection() {
@@ -326,8 +364,16 @@ export function EbayWorkbench() {
                 <p className="eyebrow">Session Configuration</p>
                 <h2>Environment and credentials</h2>
               </div>
-              <label className="upload-pill">
-                <span>Upload `.env`</span>
+              <label
+                className={`upload-pill upload-pill--dropzone ${
+                  isDraggingEnvFile ? "upload-pill--active" : ""
+                }`}
+                onDragOver={handleEnvDragOver}
+                onDragLeave={handleEnvDragLeave}
+                onDrop={handleEnvDrop}
+              >
+                <span>Drop `.env` here or click to upload</span>
+                <small>Supports drag and drop for local environment files.</small>
                 <input type="file" accept=".env,text/plain" onChange={handleEnvUpload} />
               </label>
             </div>
