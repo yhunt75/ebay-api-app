@@ -559,6 +559,44 @@ pre {
   gap: 18px;
 }
 
+.insight-card {
+  display: grid;
+  gap: 10px;
+  padding: 18px 20px;
+  border-radius: 22px;
+  border: 1px solid rgba(244, 184, 96, 0.18);
+  background:
+    linear-gradient(180deg, rgba(244, 184, 96, 0.09), rgba(255, 255, 255, 0.02)),
+    rgba(255, 255, 255, 0.02);
+}
+
+.insight-card h4,
+.insight-card p {
+  margin: 0;
+}
+
+.insight-card h4 {
+  font-size: 1.08rem;
+  letter-spacing: -0.03em;
+}
+
+.insight-card p {
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.insight-card strong,
+.insight-card code {
+  color: var(--text);
+}
+
+.insight-card--browse {
+  border-color: rgba(103, 196, 214, 0.2);
+  background:
+    linear-gradient(180deg, rgba(103, 196, 214, 0.1), rgba(255, 255, 255, 0.02)),
+    rgba(255, 255, 255, 0.02);
+}
+
 .button,
 .upload-pill {
   display: inline-flex;

@@ -725,6 +725,37 @@ export function EbayWorkbench() {
                   )}
                 </div>
 
+                {selectedCall.id === "inventory-get-items" ? (
+                  <div className="insight-card">
+                    <p className="eyebrow">Why Listings May Be Missing</p>
+                    <h4>`getInventoryItems` only returns Inventory API records.</h4>
+                    <p>
+                      Active listings created outside the Inventory API model will not appear here
+                      until they are migrated.
+                    </p>
+                    <p>
+                      Migration requires an eligible fixed-price listing with a seller SKU. After
+                      migration, use <strong>`getOffers`</strong> to inspect listing statuses such
+                      as <strong>`ACTIVE`</strong> and <strong>`OUT_OF_STOCK`</strong>.
+                    </p>
+                  </div>
+                ) : null}
+
+                {selectedCall.id === "browse-get-item-by-legacy-id" ? (
+                  <div className="insight-card insight-card--browse">
+                    <p className="eyebrow">Legacy Listing Lookup</p>
+                    <h4>Use the public item ID when Inventory API migration is not possible.</h4>
+                    <p>
+                      The value after <code>/itm/</code> in an eBay listing URL can be looked up
+                      directly through the Browse API.
+                    </p>
+                    <p>
+                      This is the right fallback for listings that cannot be migrated because they
+                      do not have seller-defined SKUs.
+                    </p>
+                  </div>
+                ) : null}
+
                 <div className="actions">
                   <button className="button button--primary" type="submit" disabled={isSubmitting}>
                     {isSubmitting ? "Calling eBay..." : "Run API Call"}

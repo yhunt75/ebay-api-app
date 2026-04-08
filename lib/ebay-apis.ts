@@ -1,6 +1,11 @@
 export type EbayEnvironment = "sandbox" | "production";
-export type ApiFamilyId = "account" | "inventory" | "taxonomy" | "fulfillment";
-export type ApiFieldLocation = "path" | "query" | "body";
+export type ApiFamilyId =
+  | "account"
+  | "inventory"
+  | "taxonomy"
+  | "fulfillment"
+  | "browse";
+export type ApiFieldLocation = "path" | "query" | "body" | "header";
 export type ApiFieldType = "text" | "textarea" | "number";
 
 export type EnvironmentConfig = {
@@ -79,6 +84,12 @@ export const API_FAMILIES: Array<{
     id: "fulfillment",
     label: "Fulfillment API",
     description: "Inspect orders and shipping fulfillment state that affects stock movement.",
+  },
+  {
+    id: "browse",
+    label: "Browse API",
+    description:
+      "Look up legacy eBay listing IDs directly when a listing is not yet managed by the Inventory API.",
   },
 ];
 
@@ -199,6 +210,10 @@ export const API_CALLS: ApiCallDefinition[] = [
       "https://api.ebay.com/oauth/api_scope/sell.inventory",
       "https://api.ebay.com/oauth/api_scope/sell.inventory.readonly",
     ],
+    notes: [
+      "Use this after a listing has been migrated into the Inventory API model.",
+      "The response includes listing status values such as ACTIVE and OUT_OF_STOCK.",
+    ],
     fields: [
       {
         key: "sku",
@@ -239,6 +254,57 @@ export const API_CALLS: ApiCallDefinition[] = [
         defaultValue: "0",
         placeholder: "0",
         description: "How many offers to skip before the page starts.",
+      },
+    ],
+  },
+  {
+    id: "browse-get-item-by-legacy-id",
+    apiFamily: "browse",
+    title: "getItemByLegacyId",
+    summary:
+      "Retrieve public listing details directly from a legacy eBay item ID, such as the value that appears after /itm/ in an eBay listing URL.",
+    docsUrl:
+      "https://developer.ebay.com/api-docs/buy/browse/resources/item/methods/getItemByLegacyId",
+    path: "/buy/browse/v1/item/get_item_by_legacy_id",
+    method: "GET",
+    sandboxSupported: true,
+    requiredScopes: ["https://api.ebay.com/oauth/api_scope"],
+    notes: [
+      "This is the documented fallback when an active listing is not yet represented by Inventory API objects.",
+      "For multi-variation listings, you may also need the variation SKU or variation ID.",
+    ],
+    fields: [
+      {
+        key: "legacy_item_id",
+        label: "Legacy Item ID",
+        location: "query",
+        required: true,
+        placeholder: "318101253980",
+        description: "The numeric item ID from the public eBay listing URL.",
+      },
+      {
+        key: "marketplace_id",
+        label: "Marketplace ID",
+        location: "header",
+        defaultValue: "EBAY_US",
+        placeholder: "EBAY_US",
+        description: "The marketplace header used by the Browse API request.",
+      },
+      {
+        key: "legacy_variation_sku",
+        label: "Legacy Variation SKU",
+        location: "query",
+        placeholder: "VARIATION-SKU",
+        description:
+          "Optional variation SKU for a multi-variation listing when you need one specific child item.",
+      },
+      {
+        key: "legacy_variation_id",
+        label: "Legacy Variation ID",
+        location: "query",
+        placeholder: "1234567890",
+        description:
+          "Optional variation item ID for a multi-variation listing when you need one specific child item.",
       },
     ],
   },

@@ -6,6 +6,7 @@ A Next.js App Router app for exploring core seller-facing eBay APIs from one UI:
 - Inventory API
 - Taxonomy API
 - Fulfillment API
+- Browse API fallback for legacy listing IDs
 
 The interface lets a user:
 
@@ -34,6 +35,10 @@ The interface lets a user:
 - `getInventoryLocations`
 - `getOffers`
 - `bulkMigrateListing`
+
+### Browse API
+
+- `getItemByLegacyId`
 
 ### Taxonomy API
 

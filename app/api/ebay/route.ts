@@ -65,15 +65,27 @@ export async function POST(request: NextRequest) {
   const requestBody = buildRequestBody(call, params);
 
   try {
+    const headers = new Headers({
+      Accept: "application/json",
+      Authorization: `Bearer ${config.userAccessToken.trim()}`,
+      "Accept-Language": requestLocale,
+      "Content-Language": requestLocale,
+    });
+
+    if (call.method === "POST") {
+      headers.set("Content-Type", "application/json");
+    }
+
+    if (call.id === "browse-get-item-by-legacy-id") {
+      headers.set(
+        "X-EBAY-C-MARKETPLACE-ID",
+        params.marketplace_id?.trim() || "EBAY_US",
+      );
+    }
+
     const ebayResponse = await fetch(requestUrl, {
       method: call.method,
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${config.userAccessToken.trim()}`,
-        "Accept-Language": requestLocale,
-        "Content-Language": requestLocale,
-        ...(call.method === "POST" ? { "Content-Type": "application/json" } : {}),
-      },
+      headers,
       body: call.method === "POST" ? JSON.stringify(requestBody) : undefined,
       cache: "no-store",
     });
