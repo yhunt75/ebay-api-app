@@ -16,7 +16,7 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "eBay Inventory Workbench",
+  title: "eBay API Workbench",
   description:
     "A Next.js app for querying eBay Account, Inventory, Taxonomy, and Fulfillment APIs.",
 };

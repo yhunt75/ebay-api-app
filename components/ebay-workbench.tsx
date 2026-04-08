@@ -24,7 +24,7 @@ type ResponseState = {
   ok: boolean;
   status: number;
   statusText: string;
-  requestUrl: string;
+  requestUrl?: string;
   body: string;
 };
 
@@ -154,6 +154,8 @@ export function EbayWorkbench() {
   const availableCalls = API_CALLS.filter((call) => call.apiFamily === selectedApi);
   const selectedCall =
     availableCalls.find((call) => call.id === selectedCallId) ?? availableCalls[0];
+  const selectedFamily =
+    API_FAMILIES.find((family) => family.id === selectedApi) ?? API_FAMILIES[0];
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -304,7 +306,7 @@ export function EbayWorkbench() {
       });
 
       const payload = (await response.json()) as
-        | { error: string }
+        | { error: string; requestUrl?: string }
         | {
             ok: boolean;
             status: number;
@@ -313,9 +315,15 @@ export function EbayWorkbench() {
             data: unknown;
           };
 
-      if (!response.ok || "error" in payload) {
-        setResponseState(null);
-        setErrorMessage("error" in payload ? payload.error : "The eBay request failed.");
+      if ("error" in payload) {
+        setResponseState({
+          ok: false,
+          status: response.status,
+          statusText: response.statusText,
+          requestUrl: payload.requestUrl,
+          body: JSON.stringify(payload, null, 2),
+        });
+        setErrorMessage(payload.error);
         return;
       }
 
@@ -324,8 +332,12 @@ export function EbayWorkbench() {
         status: payload.status,
         statusText: payload.statusText,
         requestUrl: payload.requestUrl,
-        body: JSON.stringify(payload.data, null, 2),
+        body: JSON.stringify(payload, null, 2),
       });
+
+      if (!response.ok) {
+        setErrorMessage("The eBay API returned an error response. Full details are shown below.");
+      }
     } catch (error) {
       setResponseState(null);
       setErrorMessage(
@@ -342,17 +354,53 @@ export function EbayWorkbench() {
     <main className="shell">
       <section className="hero panel">
         <div className="hero__copy">
-          <p className="eyebrow">eBay Inventory Workbench</p>
-          <h1>Inspect store inventory, policies, taxonomy, and order flow from one console.</h1>
+          <p className="eyebrow">eBay API Workbench</p>
+          <h1>Run seller-facing eBay APIs from one polished control center.</h1>
           <p className="hero__lede">
-            This app keeps your environment credentials in session storage, lets you swap
-            between Sandbox and Production, and renders every selected eBay response as
-            readable JSON.
+            Switch between Sandbox and Production, load credentials once per session, and
+            inspect every selected Account, Inventory, Taxonomy, or Fulfillment response as
+            formatted JSON.
           </p>
+          <div className="hero__highlights">
+            <div className="hero-stat">
+              <strong>4</strong>
+              <span>API families wired into one interface</span>
+            </div>
+            <div className="hero-stat">
+              <strong>Session-safe</strong>
+              <span>Environment values persist while call-specific fields reset cleanly</span>
+            </div>
+          </div>
         </div>
-        <div className="hero__badge">
-          <span>Docs-driven</span>
-          <strong>Account · Inventory · Taxonomy · Fulfillment</strong>
+        <div className="hero__panel">
+          <div className="hero__panel-top">
+            <span>Docs-driven</span>
+            <p>Official eBay references shape the call list, descriptions, and required inputs.</p>
+          </div>
+
+          <div className="hero__api-list">
+            <div className="hero__api-item">
+              <strong>Account</strong>
+              <span>Policies and seller privileges</span>
+            </div>
+            <div className="hero__api-item">
+              <strong>Inventory</strong>
+              <span>SKUs, locations, and offers</span>
+            </div>
+            <div className="hero__api-item">
+              <strong>Taxonomy</strong>
+              <span>Category trees and item aspects</span>
+            </div>
+            <div className="hero__api-item">
+              <strong>Fulfillment</strong>
+              <span>Orders and shipping status</span>
+            </div>
+          </div>
+
+          <div className="hero__panel-footer">
+            <span>Built for rapid inspection</span>
+            <strong>Readable responses, copy-ready payloads, minimal form friction.</strong>
+          </div>
         </div>
       </section>
 
@@ -474,98 +522,154 @@ export function EbayWorkbench() {
               </div>
             </div>
 
-            <div className="segmented" role="tablist" aria-label="API families">
-              {API_FAMILIES.map((family) => (
-                <button
-                  key={family.id}
-                  type="button"
-                  className={`segmented__item ${
-                    family.id === selectedApi ? "segmented__item--active" : ""
-                  }`}
-                  onClick={() => setSelectedApi(family.id)}
-                >
-                  <span>{family.label}</span>
-                  <small>{family.description}</small>
-                </button>
-              ))}
-            </div>
+            <div className="runner-shell">
+              <p className="runner-lede">
+                Start with the API family, then pick the exact eBay method you want to inspect.
+                The details and required inputs update automatically.
+              </p>
 
-            <div className="grid grid--api">
-              <label className="field">
-                <span>API Call</span>
-                <select
-                  className="input"
-                  value={selectedCall.id}
-                  onChange={(event) => setSelectedCallId(event.target.value)}
-                >
-                  {availableCalls.map((call) => (
-                    <option key={call.id} value={call.id}>
-                      {call.title}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <div className="description-card">
-                <p className="eyebrow">Call Description</p>
-                <h3>{selectedCall.title}</h3>
-                <p>{selectedCall.summary}</p>
-                <p>
-                  <strong>Method:</strong> {selectedCall.method}
-                </p>
-                <p>
-                  <strong>Sandbox:</strong>{" "}
-                  {selectedCall.sandboxSupported ? "Supported" : "Not supported"}
-                </p>
-                <p>
-                  <strong>Required scopes:</strong>{" "}
-                  {selectedCall.requiredScopes.join(", ")}
-                </p>
-                {selectedCall.notes?.map((note) => (
-                  <p key={note} className="note">
-                    {note}
-                  </p>
+              <div className="segmented" role="tablist" aria-label="API families">
+                {API_FAMILIES.map((family) => (
+                  <button
+                    key={family.id}
+                    type="button"
+                    className={`segmented__item ${
+                      family.id === selectedApi ? "segmented__item--active" : ""
+                    }`}
+                    onClick={() => setSelectedApi(family.id)}
+                  >
+                    <span>{family.label}</span>
+                    <small>{family.description}</small>
+                  </button>
                 ))}
-                <a
-                  className="docs-link"
-                  href={selectedCall.docsUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Open eBay documentation
-                </a>
               </div>
-            </div>
 
-            <div className="grid grid--params">
-              {selectedCall.fields.length === 0 ? (
-                <div className="empty-state">
-                  <strong>No call-specific inputs are required.</strong>
-                  <p>You can run this method immediately with the session credentials above.</p>
-                </div>
-              ) : (
-                selectedCall.fields.map((field) => (
-                  <label key={field.key} className="field">
-                    <span>
-                      {field.label}
-                      {field.required ? " *" : ""}
-                    </span>
-                    {fieldInput(field, callValues[field.key] ?? "", (nextValue) =>
-                      updateCallValue(field.key, nextValue),
-                    )}
-                    <small>{field.description}</small>
+              <div className="runner-grid">
+                <div className="selector-card">
+                  <div className="selector-card__header">
+                    <p className="eyebrow">Step 1</p>
+                    <h3>Choose a call</h3>
+                    <p>
+                      {selectedFamily.label} currently exposes {availableCalls.length} configured
+                      call{availableCalls.length === 1 ? "" : "s"} in this workbench.
+                    </p>
+                  </div>
+
+                  <div className="family-badge">
+                    <strong>{selectedFamily.label}</strong>
+                    <span>{selectedFamily.description}</span>
+                  </div>
+
+                  <label className="field field--compact">
+                    <span>API Call</span>
+                    <select
+                      className="input input--selector"
+                      value={selectedCall.id}
+                      onChange={(event) => setSelectedCallId(event.target.value)}
+                    >
+                      {availableCalls.map((call) => (
+                        <option key={call.id} value={call.id}>
+                          {call.title}
+                        </option>
+                      ))}
+                    </select>
                   </label>
-                ))
-              )}
-            </div>
+                </div>
 
-            <div className="actions">
-              <button className="button button--primary" type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Calling eBay..." : "Run API Call"}
-              </button>
-              <button className="button button--ghost" type="button" onClick={resetApiSection}>
-                Reset Selected API Form
-              </button>
+                <div className="description-card description-card--featured">
+                  <div className="description-card__top">
+                    <div>
+                      <p className="eyebrow">Step 2</p>
+                      <h3>{selectedCall.title}</h3>
+                    </div>
+                    <span
+                      className={`support-pill ${
+                        selectedCall.sandboxSupported
+                          ? "support-pill--supported"
+                          : "support-pill--restricted"
+                      }`}
+                    >
+                      {selectedCall.sandboxSupported ? "Sandbox ready" : "Production only"}
+                    </span>
+                  </div>
+
+                  <p className="description-card__summary">{selectedCall.summary}</p>
+
+                  <div className="description-meta">
+                    <div className="description-meta__item">
+                      <span>Method</span>
+                      <strong>{selectedCall.method}</strong>
+                    </div>
+                    <div className="description-meta__item">
+                      <span>Scopes</span>
+                      <strong>{selectedCall.requiredScopes.length}</strong>
+                    </div>
+                    <div className="description-meta__item description-meta__item--wide">
+                      <span>Required scopes</span>
+                      <strong>{selectedCall.requiredScopes.join(", ")}</strong>
+                    </div>
+                  </div>
+
+                  {selectedCall.notes?.map((note) => (
+                    <p key={note} className="note">
+                      {note}
+                    </p>
+                  ))}
+
+                  <a
+                    className="docs-link"
+                    href={selectedCall.docsUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open eBay documentation
+                  </a>
+                </div>
+              </div>
+
+              <div className="params-card">
+                <div className="params-card__header">
+                  <div>
+                    <p className="eyebrow">Step 3</p>
+                    <h3>Provide required inputs</h3>
+                  </div>
+                  <p>
+                    Only the fields required by the selected call are shown here. Reset clears this
+                    section without touching your session credentials.
+                  </p>
+                </div>
+
+                <div className="grid grid--params">
+                  {selectedCall.fields.length === 0 ? (
+                    <div className="empty-state">
+                      <strong>No call-specific inputs are required.</strong>
+                      <p>You can run this method immediately with the session credentials above.</p>
+                    </div>
+                  ) : (
+                    selectedCall.fields.map((field) => (
+                      <label key={field.key} className="field">
+                        <span>
+                          {field.label}
+                          {field.required ? " *" : ""}
+                        </span>
+                        {fieldInput(field, callValues[field.key] ?? "", (nextValue) =>
+                          updateCallValue(field.key, nextValue),
+                        )}
+                        <small>{field.description}</small>
+                      </label>
+                    ))
+                  )}
+                </div>
+
+                <div className="actions">
+                  <button className="button button--primary" type="submit" disabled={isSubmitting}>
+                    {isSubmitting ? "Calling eBay..." : "Run API Call"}
+                  </button>
+                  <button className="button button--ghost" type="button" onClick={resetApiSection}>
+                    Reset Selected API Form
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </form>
@@ -597,7 +701,7 @@ export function EbayWorkbench() {
                   >
                     {responseState.status} {responseState.statusText}
                   </span>
-                  <code>{responseState.requestUrl}</code>
+                  {responseState.requestUrl ? <code>{responseState.requestUrl}</code> : null}
                 </div>
                 <pre className="json-view">{responseState.body}</pre>
               </>

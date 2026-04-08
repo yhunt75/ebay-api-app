@@ -1,4 +1,4 @@
-# eBay Inventory Workbench
+# eBay API Workbench
 
 A Next.js App Router app for exploring core seller-facing eBay APIs from one UI:
 
