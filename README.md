@@ -100,6 +100,8 @@ This project is a standard Next.js deployment target. You can:
 - import the GitHub repository into Vercel, or
 - deploy with the Vercel CLI after linking the project
 
+This repository also includes a [`vercel.json`](./vercel.json) file that pins the framework preset to `nextjs` and overrides any incorrect project-level output directory setting.
+
 No server-side environment variables are required because the app accepts runtime credentials from the user interface and sends the selected call through the built-in `/api/ebay` proxy route.
 
 ## Documentation references
