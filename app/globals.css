@@ -217,6 +217,48 @@ pre {
   align-items: start;
 }
 
+.app-footer {
+  max-width: 1440px;
+  margin: 24px auto 0;
+  display: grid;
+  gap: 18px;
+  background:
+    radial-gradient(circle at top left, rgba(103, 196, 214, 0.12), transparent 32%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02)),
+    rgba(255, 255, 255, 0.02);
+}
+
+.app-footer__copy {
+  display: grid;
+  gap: 8px;
+}
+
+.app-footer__copy h2 {
+  margin: 0;
+  max-width: 20ch;
+  font-size: clamp(1.4rem, 2.8vw, 2rem);
+  letter-spacing: -0.04em;
+}
+
+.app-footer__stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.stack-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 42px;
+  padding: 0.7rem 1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+  font-size: 0.92rem;
+  line-height: 1.2;
+}
+
 .stack {
   display: grid;
   gap: 24px;

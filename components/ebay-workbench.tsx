@@ -36,7 +36,7 @@ type AlertState = {
   detail?: string;
 };
 
-type CredentialField = "appId" | "devId" | "certId";
+type CredentialField = "appId" | "devId" | "certId" | "userAccessToken";
 type EnvironmentCredentialProfiles = Record<
   EbayEnvironment,
   Pick<EnvironmentConfig, CredentialField>
@@ -56,11 +56,13 @@ const DEFAULT_CREDENTIAL_PROFILES: EnvironmentCredentialProfiles = {
     appId: "",
     devId: "",
     certId: "",
+    userAccessToken: "",
   },
   sandbox: {
     appId: "",
     devId: "",
     certId: "",
+    userAccessToken: "",
   },
 };
 
@@ -84,7 +86,12 @@ function stripWrappingQuotes(value: string) {
 }
 
 function isCredentialField(value: string): value is CredentialField {
-  return value === "appId" || value === "devId" || value === "certId";
+  return (
+    value === "appId" ||
+    value === "devId" ||
+    value === "certId" ||
+    value === "userAccessToken"
+  );
 }
 
 function getCredentialFieldFromKey(key: string): CredentialField | null {
@@ -98,6 +105,9 @@ function getCredentialFieldFromKey(key: string): CredentialField | null {
     case "CERT_ID":
     case "EBAY_CERT_ID":
       return "certId";
+    case "USER_ACCESS_TOKEN":
+    case "EBAY_USER_ACCESS_TOKEN":
+      return "userAccessToken";
     default:
       return null;
   }
@@ -125,7 +135,7 @@ function getCredentialMatch(rawKey: string) {
   }
 
   const envSpecificMatch = upperKey.match(
-    /^(?:(EBAY)_)?(PRODUCTION|PROD|LIVE|SANDBOX|SBX)_(APP_ID|DEV_ID|CERT_ID)$/,
+    /^(?:(EBAY)_)?(PRODUCTION|PROD|LIVE|SANDBOX|SBX)_(APP_ID|DEV_ID|CERT_ID|USER_ACCESS_TOKEN)$/,
   );
   if (!envSpecificMatch) {
     return null;
@@ -213,10 +223,6 @@ function parseEnvFile(contents: string): ParsedEnvFile {
       case "EBAY_ENV":
       case "ENVIRONMENT":
         nextConfig.environment = coerceEnvironment(value);
-        break;
-      case "USER_ACCESS_TOKEN":
-      case "EBAY_USER_ACCESS_TOKEN":
-        nextConfig.userAccessToken = value;
         break;
       case "REQUEST_LOCALE":
       case "ACCEPT_LANGUAGE":
@@ -344,6 +350,7 @@ export function EbayWorkbench() {
               appId: baseConfig.appId,
               devId: baseConfig.devId,
               certId: baseConfig.certId,
+              userAccessToken: baseConfig.userAccessToken,
             },
           },
         );
@@ -470,7 +477,7 @@ export function EbayWorkbench() {
     setNoticeAlert({
       title: `Loaded credentials from ${file.name} into this browser session.`,
       detail:
-        "The form now keeps separate APP_ID, Dev_ID, and Cert_ID values for Production and Sandbox and swaps them automatically when you change environments.",
+        "The form now keeps separate APP_ID, Dev_ID, Cert_ID, and USER_ACCESS_TOKEN values for Production and Sandbox and swaps them automatically when you change environments.",
     });
     setErrorAlert(null);
   }
@@ -791,7 +798,9 @@ export function EbayWorkbench() {
                   value={config.userAccessToken}
                   placeholder="Paste the bearer token used for the selected environment"
                   spellCheck={false}
-                  onChange={(event) => updateConfig("userAccessToken", event.target.value)}
+                  onChange={(event) =>
+                    updateCredentialField("userAccessToken", event.target.value)
+                  }
                 />
               </label>
 
@@ -832,11 +841,12 @@ export function EbayWorkbench() {
             </div>
 
               <p className="microcopy">
-                APP_ID, Dev_ID, and Cert_ID are preserved for the browser session so the user can
-                swap calls without re-entering them. Production and Sandbox credential sets are
-                stored separately, and changing the environment dropdown loads the matching values
-                automatically. The live REST requests in this workbench use the provided OAuth
-                bearer token and a valid locale header such as <code>en-US</code>.
+                APP_ID, Dev_ID, Cert_ID, and USER_ACCESS_TOKEN are preserved for the browser
+                session so the user can swap calls without re-entering them. Production and
+                Sandbox credential sets are stored separately, and changing the environment
+                dropdown loads the matching values automatically. The live REST requests in this
+                workbench use the provided OAuth bearer token and a valid locale header such as
+                <code>en-US</code>.
               </p>
           </div>
 
@@ -1125,6 +1135,20 @@ export function EbayWorkbench() {
           )}
         </aside>
       </section>
+
+      <footer className="app-footer panel">
+        <div className="app-footer__copy">
+          <p className="eyebrow">Tech Stack</p>
+          <h2>Built for fast eBay API inspection with a modern web stack.</h2>
+        </div>
+        <div className="app-footer__stack" aria-label="Application tech stack">
+          <span className="stack-pill">Next.js 16 App Router</span>
+          <span className="stack-pill">React 19</span>
+          <span className="stack-pill">TypeScript</span>
+          <span className="stack-pill">Vercel</span>
+          <span className="stack-pill">eBay REST APIs</span>
+        </div>
+      </footer>
     </main>
   );
 }

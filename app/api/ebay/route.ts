@@ -14,6 +14,12 @@ type ProxyBody = {
   params?: Record<string, string>;
 };
 
+type CredentialConfigField =
+  | "appId"
+  | "devId"
+  | "certId"
+  | "userAccessToken";
+
 function errorResponse(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
 }
@@ -26,6 +32,99 @@ function getOauthBaseUrl(environment: EnvironmentConfig["environment"]) {
 
 function normalizeAccessToken(token: string) {
   return token.trim().replace(/^Bearer\s+/i, "");
+}
+
+function resolveEnvironment(config?: Partial<EnvironmentConfig>) {
+  const configuredEnvironment = config?.environment ?? process.env.EBAY_ENVIRONMENT;
+  return configuredEnvironment === "sandbox" ? "sandbox" : "production";
+}
+
+function getEnvironmentPrefixes(environment: EnvironmentConfig["environment"]) {
+  return environment === "sandbox"
+    ? ["SANDBOX", "SBX"]
+    : ["PRODUCTION", "PROD", "LIVE"];
+}
+
+function getConfigFieldCandidates(
+  key: CredentialConfigField,
+  environment: EnvironmentConfig["environment"],
+) {
+  const environmentPrefixes = getEnvironmentPrefixes(environment);
+
+  switch (key) {
+    case "appId":
+      return [
+        ...environmentPrefixes.flatMap((prefix) => [`${prefix}_APP_ID`, `EBAY_${prefix}_APP_ID`]),
+        "APP_ID",
+        "EBAY_APP_ID",
+      ];
+    case "devId":
+      return [
+        ...environmentPrefixes.flatMap((prefix) => [`${prefix}_DEV_ID`, `EBAY_${prefix}_DEV_ID`]),
+        "DEV_ID",
+        "EBAY_DEV_ID",
+      ];
+    case "certId":
+      return [
+        ...environmentPrefixes.flatMap((prefix) => [
+          `${prefix}_CERT_ID`,
+          `EBAY_${prefix}_CERT_ID`,
+        ]),
+        "CERT_ID",
+        "EBAY_CERT_ID",
+      ];
+    case "userAccessToken":
+      return [
+        ...environmentPrefixes.flatMap((prefix) => [
+          `${prefix}_USER_ACCESS_TOKEN`,
+          `EBAY_${prefix}_USER_ACCESS_TOKEN`,
+        ]),
+        "USER_ACCESS_TOKEN",
+        "EBAY_USER_ACCESS_TOKEN",
+      ];
+    default:
+      return [];
+  }
+}
+
+function getConfigValueFromEnv(
+  key: CredentialConfigField,
+  environment: EnvironmentConfig["environment"],
+) {
+  for (const candidate of getConfigFieldCandidates(key, environment)) {
+    const value = process.env[candidate]?.trim();
+    if (value) {
+      return value;
+    }
+  }
+
+  return "";
+}
+
+function resolveConfig(config?: Partial<EnvironmentConfig>): EnvironmentConfig {
+  const environment = resolveEnvironment(config);
+
+  return {
+    environment,
+    appId: getConfigValueFromEnv("appId", environment) || config?.appId?.trim() || "",
+    devId: getConfigValueFromEnv("devId", environment) || config?.devId?.trim() || "",
+    certId: getConfigValueFromEnv("certId", environment) || config?.certId?.trim() || "",
+    userAccessToken:
+      getConfigValueFromEnv("userAccessToken", environment) ||
+      config?.userAccessToken?.trim() ||
+      "",
+    requestLocale:
+      process.env.REQUEST_LOCALE?.trim() ||
+      process.env.ACCEPT_LANGUAGE?.trim() ||
+      config?.requestLocale?.trim() ||
+      "en-US",
+    oauthUserScopes:
+      process.env.OAUTH_USER_SCOPES?.trim() || config?.oauthUserScopes?.trim() || "",
+    oauthAuthorizeUrlBase:
+      process.env.OAUTH_AUTHORIZE_URL_BASE?.trim() ||
+      config?.oauthAuthorizeUrlBase?.trim() ||
+      "https://auth.ebay.com/oauth2/authorize",
+  };
 }
 
 function usesApplicationToken(call: ApiCallDefinition) {
@@ -106,10 +205,7 @@ export async function POST(request: NextRequest) {
     return errorResponse("Unknown eBay API call selection.");
   }
 
-  const config = body.config;
-  if (!config?.environment || !["sandbox", "production"].includes(config.environment)) {
-    return errorResponse("Select either sandbox or production before submitting.");
-  }
+  const config = resolveConfig(body.config);
 
   if (!usesApplicationToken(call) && !normalizeAccessToken(config.userAccessToken ?? "")) {
     return errorResponse("A USER_ACCESS_TOKEN is required to call the eBay APIs.");
