@@ -261,7 +261,7 @@ pre {
 
 .grid--credentials {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-top: 12px;
+  margin-top: 16px;
 }
 
 .grid--params {
