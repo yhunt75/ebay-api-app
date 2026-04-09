@@ -4,6 +4,7 @@ import {
   buildRequestBody,
   buildRequestUrl,
   getCallDefinition,
+  type ApiCallDefinition,
   type EnvironmentConfig,
 } from "@/lib/ebay-apis";
 
@@ -15,6 +16,80 @@ type ProxyBody = {
 
 function errorResponse(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
+}
+
+function getOauthBaseUrl(environment: EnvironmentConfig["environment"]) {
+  return environment === "sandbox"
+    ? "https://api.sandbox.ebay.com"
+    : "https://api.ebay.com";
+}
+
+function normalizeAccessToken(token: string) {
+  return token.trim().replace(/^Bearer\s+/i, "");
+}
+
+function usesApplicationToken(call: ApiCallDefinition) {
+  return call.requiredScopes.some(
+    (scope) =>
+      scope === "https://api.ebay.com/oauth/api_scope" &&
+      !scope.includes("/sell."),
+  );
+}
+
+async function getApplicationAccessToken(
+  call: ApiCallDefinition,
+  config: Partial<EnvironmentConfig>,
+) {
+  const appId = config.appId?.trim();
+  const certId = config.certId?.trim();
+
+  if (!appId || !certId) {
+    throw new Error(
+      `APP_ID and CERT_ID are required to generate an application token for ${call.title}.`,
+    );
+  }
+
+  const credentials = Buffer.from(`${appId}:${certId}`).toString("base64");
+  const oauthUrl = new URL("/identity/v1/oauth2/token", getOauthBaseUrl(config.environment!));
+  const tokenResponse = await fetch(oauthUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${credentials}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "application/json",
+    },
+    body: new URLSearchParams({
+      grant_type: "client_credentials",
+      scope: call.requiredScopes.join(" "),
+    }).toString(),
+    cache: "no-store",
+  });
+
+  const rawText = await tokenResponse.text();
+  let data: unknown = null;
+
+  if (rawText) {
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      data = { raw: rawText };
+    }
+  }
+
+  if (
+    !tokenResponse.ok ||
+    typeof data !== "object" ||
+    data === null ||
+    !("access_token" in data) ||
+    typeof data.access_token !== "string"
+  ) {
+    const detail =
+      data && typeof data === "object" ? JSON.stringify(data, null, 2) : rawText || "No response body.";
+
+    throw new Error(`Unable to generate an application token for ${call.title}.\n\n${detail}`);
+  }
+
+  return data.access_token;
 }
 
 export async function POST(request: NextRequest) {
@@ -36,7 +111,7 @@ export async function POST(request: NextRequest) {
     return errorResponse("Select either sandbox or production before submitting.");
   }
 
-  if (!config.userAccessToken?.trim()) {
+  if (!usesApplicationToken(call) && !normalizeAccessToken(config.userAccessToken ?? "")) {
     return errorResponse("A USER_ACCESS_TOKEN is required to call the eBay APIs.");
   }
 
@@ -65,9 +140,13 @@ export async function POST(request: NextRequest) {
   const requestBody = buildRequestBody(call, params);
 
   try {
+    const accessToken = usesApplicationToken(call)
+      ? await getApplicationAccessToken(call, config)
+      : normalizeAccessToken(config.userAccessToken ?? "");
+
     const headers = new Headers({
       Accept: "application/json",
-      Authorization: `Bearer ${config.userAccessToken.trim()}`,
+      Authorization: `Bearer ${accessToken}`,
       "Accept-Language": requestLocale,
       "Content-Language": requestLocale,
     });
