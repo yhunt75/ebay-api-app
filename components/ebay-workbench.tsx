@@ -640,7 +640,7 @@ export function EbayWorkbench() {
 
   return (
     <main className="shell">
-      <section className="hero panel">
+      <section className="hero panel" id="top">
         <div className="hero__copy">
           <p className="eyebrow">eBay API Workbench</p>
           <h1>Run seller-facing eBay APIs from one polished control center.</h1>
@@ -694,7 +694,7 @@ export function EbayWorkbench() {
 
       <section className="workspace">
         <form className="stack" onSubmit={handleSubmit}>
-          <div className="panel">
+          <div className="panel" id="configuration">
             <div className="section-heading">
               <div>
                 <p className="eyebrow">Session Configuration</p>
@@ -850,7 +850,7 @@ export function EbayWorkbench() {
               </p>
           </div>
 
-          <div className="panel">
+          <div className="panel" id="api-runner">
             <div className="section-heading">
               <div>
                 <p className="eyebrow">API Runner</p>
@@ -1079,7 +1079,7 @@ export function EbayWorkbench() {
         </form>
 
         <aside className="stack">
-          <div className="panel response-panel">
+          <div className="panel response-panel" id="response-panel">
             <div className="section-heading">
               <div>
                 <p className="eyebrow">Response</p>
@@ -1136,17 +1136,37 @@ export function EbayWorkbench() {
         </aside>
       </section>
 
-      <footer className="app-footer panel">
-        <div className="app-footer__copy">
-          <p className="eyebrow">Tech Stack</p>
-          <h2>Built for fast eBay API inspection with a modern web stack.</h2>
+      <footer className="app-footer" aria-label="Site footer">
+        <div className="app-footer__main">
+          <div className="app-footer__brand">
+            <p className="eyebrow">eBay API Workbench</p>
+            <h2>Seller API tooling in one place.</h2>
+            <p>
+              A focused control center for inspecting eBay Account, Inventory, Taxonomy, and
+              Fulfillment API responses with less setup friction.
+            </p>
+          </div>
+
+          <nav className="app-footer__nav" aria-label="Footer navigation">
+            <div>
+              <span className="app-footer__label">Explore</span>
+              <a href="#configuration">Configuration</a>
+              <a href="#api-runner">API Runner</a>
+              <a href="#response-panel">Response</a>
+            </div>
+            <div>
+              <span className="app-footer__label">Resources</span>
+              <a href="https://developer.ebay.com/api-docs" target="_blank" rel="noreferrer">
+                eBay API Docs
+              </a>
+              <a href="#top">Back to top</a>
+            </div>
+          </nav>
         </div>
-        <div className="app-footer__stack" aria-label="Application tech stack">
-          <span className="stack-pill">Next.js 16 App Router</span>
-          <span className="stack-pill">React 19</span>
-          <span className="stack-pill">TypeScript</span>
-          <span className="stack-pill">Vercel</span>
-          <span className="stack-pill">eBay REST APIs</span>
+
+        <div className="app-footer__meta">
+          <p>Built with Next.js 16, React 19, TypeScript, Vercel, and eBay REST APIs.</p>
+          <p>&copy; {new Date().getFullYear()} eBay API Workbench</p>
         </div>
       </footer>
     </main>
