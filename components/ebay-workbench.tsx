@@ -131,6 +131,10 @@ function getEnvironmentPrefix(prefix: string): EbayEnvironment | null {
 
 function getCredentialMatch(rawKey: string) {
   const upperKey = rawKey.toUpperCase();
+  if (upperKey === "USER_ACCESS_TOKEN" || upperKey === "EBAY_USER_ACCESS_TOKEN") {
+    return null;
+  }
+
   const directField = getCredentialFieldFromKey(upperKey);
   if (directField) {
     return { field: directField, environment: null as EbayEnvironment | null };
@@ -481,7 +485,7 @@ export function EbayWorkbench() {
     setNoticeAlert({
       title: `Loaded credentials from ${file.name} into this browser session.`,
       detail:
-        "The form now keeps separate APP_ID, Dev_ID, Cert_ID, and USER_ACCESS_TOKEN values for Production and Sandbox and swaps them automatically when you change environments.",
+        "The form now keeps separate APP_ID, Dev_ID, Cert_ID, and PRODUCTION_USER_ACCESS_TOKEN or SANDBOX_USER_ACCESS_TOKEN values and swaps them automatically when you change environments.",
     });
     setErrorAlert(null);
   }
@@ -815,7 +819,7 @@ export function EbayWorkbench() {
               </label>
 
               <label className="field field--wide">
-                <span>USER_ACCESS_TOKEN</span>
+                <span>PRODUCTION_USER_ACCESS_TOKEN</span>
                 <textarea
                   className="input input--textarea"
                   value={config.userAccessToken}
@@ -864,11 +868,12 @@ export function EbayWorkbench() {
             </div>
 
               <p className="microcopy">
-                APP_ID, Dev_ID, Cert_ID, and USER_ACCESS_TOKEN are preserved for the browser
-                session so the user can swap calls without re-entering them. Production and
-                Sandbox credential sets are stored separately, and changing the environment
-                dropdown loads the matching values automatically. The live REST requests in this
-                workbench use the provided OAuth bearer token and a valid locale header such as
+                APP_ID, Dev_ID, Cert_ID, and the environment-specific user access token are
+                preserved for the browser session so the user can swap calls without re-entering
+                them. Production and Sandbox credential sets are stored separately, and changing
+                the environment dropdown loads the matching values automatically. The live REST
+                requests in this workbench use the provided OAuth bearer token and a valid locale
+                header such as
                 <code>en-US</code>.
               </p>
           </div>
@@ -1011,12 +1016,14 @@ export function EbayWorkbench() {
                       <label
                         key={field.key}
                         className={`field ${
-                          selectedCall.apiFamily === "inventory" && field.key === "sku"
+                          ["inventory-get-item", "inventory-get-offers"].includes(selectedCall.id) &&
+                          field.key === "sku"
                             ? "field--wide"
                             : ""
                         }`}
                       >
-                        {selectedCall.apiFamily === "inventory" && field.key === "sku" ? (
+                        {["inventory-get-item", "inventory-get-offers"].includes(selectedCall.id) &&
+                        field.key === "sku" ? (
                           <>
                             <span>
                               Item URL

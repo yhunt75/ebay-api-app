@@ -1,4 +1,6 @@
 export type EbayEnvironment = "sandbox" | "production";
+export type ApiHostId = "api" | "apiz";
+export type ApiAuthFlow = "user" | "application";
 export type ApiFamilyId =
   | "account"
   | "inventory"
@@ -7,6 +9,7 @@ export type ApiFamilyId =
   | "browse";
 export type ApiFieldLocation = "path" | "query" | "body" | "header";
 export type ApiFieldType = "text" | "textarea" | "number";
+export type ApiHttpMethod = "GET" | "POST" | "PUT" | "DELETE";
 
 export type EnvironmentConfig = {
   environment: EbayEnvironment;
@@ -37,16 +40,24 @@ export type ApiCallDefinition = {
   summary: string;
   docsUrl: string;
   path: string;
-  method: "GET" | "POST";
+  method: ApiHttpMethod;
+  apiHost?: ApiHostId;
+  authFlow?: ApiAuthFlow;
   sandboxSupported: boolean;
   requiredScopes: string[];
   notes?: string[];
   fields: ApiFieldDefinition[];
 };
 
-export const EBAY_BASE_URLS: Record<EbayEnvironment, string> = {
-  production: "https://api.ebay.com",
-  sandbox: "https://api.sandbox.ebay.com",
+export const EBAY_BASE_URLS: Record<ApiHostId, Record<EbayEnvironment, string>> = {
+  api: {
+    production: "https://api.ebay.com",
+    sandbox: "https://api.sandbox.ebay.com",
+  },
+  apiz: {
+    production: "https://apiz.ebay.com",
+    sandbox: "https://apiz.sandbox.ebay.com",
+  },
 };
 
 export const DEFAULT_ENVIRONMENT_CONFIG: EnvironmentConfig = {
@@ -59,6 +70,170 @@ export const DEFAULT_ENVIRONMENT_CONFIG: EnvironmentConfig = {
   oauthUserScopes: "",
   oauthAuthorizeUrlBase: "https://auth.ebay.com/oauth2/authorize",
 };
+
+const INVENTORY_ITEM_BODY_TEMPLATE = `{
+  "availability": {
+    "shipToLocationAvailability": {
+      "quantity": 1
+    }
+  },
+  "condition": "NEW",
+  "product": {
+    "title": "Test item title",
+    "description": "Test listing payload",
+    "aspects": {
+      "Brand": [
+        "Example"
+      ],
+      "Type": [
+        "Example"
+      ]
+    },
+    "imageUrls": [
+      "https://i.ebayimg.com/images/g/6y0AAOSwDHJmECcM/s-l960.webp"
+    ]
+  }
+}`;
+
+const OFFER_BODY_TEMPLATE = `{
+  "sku": "318101253980",
+  "marketplaceId": "EBAY_US",
+  "format": "FIXED_PRICE",
+  "availableQuantity": 1,
+  "categoryId": "9355",
+  "listingDescription": "Test listing payload",
+  "listingPolicies": {
+    "fulfillmentPolicyId": "YOUR_FULFILLMENT_POLICY_ID",
+    "paymentPolicyId": "YOUR_PAYMENT_POLICY_ID",
+    "returnPolicyId": "YOUR_RETURN_POLICY_ID"
+  },
+  "pricingSummary": {
+    "price": {
+      "currency": "USD",
+      "value": "9.99"
+    }
+  }
+}`;
+
+const BULK_INVENTORY_ITEMS_BODY_TEMPLATE = `{
+  "requests": [
+    {
+      "sku": "318101253980",
+      "locale": "en_US",
+      "availability": {
+        "shipToLocationAvailability": {
+          "quantity": 1
+        }
+      },
+      "condition": "NEW",
+      "product": {
+        "title": "Test item title",
+        "description": "Test listing payload",
+        "aspects": {
+          "Brand": [
+            "Example"
+          ],
+          "Type": [
+            "Example"
+          ]
+        },
+        "imageUrls": [
+          "https://i.ebayimg.com/images/g/6y0AAOSwDHJmECcM/s-l960.webp"
+        ]
+      }
+    }
+  ]
+}`;
+
+const INVENTORY_ITEM_GROUP_BODY_TEMPLATE = `{
+  "title": "Variation group title",
+  "description": "Variation group description",
+  "variantSKUs": [
+    "318101253980"
+  ],
+  "aspects": {
+    "Brand": [
+      "Example"
+    ]
+  },
+  "variesBy": {
+    "specifications": [
+      {
+        "name": "Color",
+        "values": [
+          "Black"
+        ]
+      }
+    ]
+  }
+}`;
+
+const BULK_CREATE_OFFER_BODY_TEMPLATE = `{
+  "requests": [
+    {
+      "sku": "318101253980",
+      "marketplaceId": "EBAY_US",
+      "format": "FIXED_PRICE",
+      "availableQuantity": 1,
+      "categoryId": "9355",
+      "listingDescription": "Test listing payload",
+      "listingPolicies": {
+        "fulfillmentPolicyId": "YOUR_FULFILLMENT_POLICY_ID",
+        "paymentPolicyId": "YOUR_PAYMENT_POLICY_ID",
+        "returnPolicyId": "YOUR_RETURN_POLICY_ID"
+      },
+      "pricingSummary": {
+        "price": {
+          "currency": "USD",
+          "value": "9.99"
+        }
+      }
+    }
+  ]
+}`;
+
+const BULK_UPDATE_PRICE_QUANTITY_BODY_TEMPLATE = `{
+  "requests": [
+    {
+      "sku": "318101253980",
+      "shipToLocationAvailability": {
+        "quantity": 1
+      },
+      "offers": [
+        {
+          "offerId": "YOUR_OFFER_ID",
+          "availableQuantity": 1
+        }
+      ]
+    }
+  ]
+}`;
+
+const PUBLISH_BY_GROUP_BODY_TEMPLATE = `{
+  "inventoryItemGroupKey": "YOUR_GROUP_KEY",
+  "marketplaceId": "EBAY_US"
+}`;
+
+const SHIPPING_FULFILLMENT_BODY_TEMPLATE = `{
+  "lineItems": [
+    {
+      "lineItemId": "YOUR_LINE_ITEM_ID",
+      "quantity": 1
+    }
+  ],
+  "shippedDate": "2026-04-09T12:00:00.000Z",
+  "shippingCarrierCode": "USPS",
+  "trackingNumber": "9400100000000000000000"
+}`;
+
+const ISSUE_REFUND_BODY_TEMPLATE = `{
+  "orderLevelRefundAmount": {
+    "value": "1.00",
+    "currency": "USD"
+  },
+  "reasonForRefund": "BUYER_CANCEL",
+  "comment": "Test refund payload"
+}`;
 
 export const API_FAMILIES: Array<{
   id: ApiFamilyId;
@@ -258,6 +433,324 @@ export const API_CALLS: ApiCallDefinition[] = [
     ],
   },
   {
+    id: "inventory-get-offer",
+    apiFamily: "inventory",
+    title: "getOffer",
+    summary:
+      "Retrieve one specific offer by its offer ID, including listing status and policy references.",
+    docsUrl:
+      "https://developer.ebay.com/api-docs/sell/inventory/resources/offer/methods/getOffer",
+    path: "/sell/inventory/v1/offer/{offerId}",
+    method: "GET",
+    sandboxSupported: true,
+    requiredScopes: [
+      "https://api.ebay.com/oauth/api_scope/sell.inventory",
+      "https://api.ebay.com/oauth/api_scope/sell.inventory.readonly",
+    ],
+    fields: [
+      {
+        key: "offerId",
+        label: "Offer ID",
+        location: "path",
+        required: true,
+        placeholder: "123456789012",
+        description: "The unique eBay offer ID returned by createOffer or getOffers.",
+      },
+    ],
+  },
+  {
+    id: "inventory-create-item",
+    apiFamily: "inventory",
+    title: "createOrReplaceInventoryItem",
+    summary:
+      "Create or fully replace one inventory item record for a seller-defined SKU.",
+    docsUrl:
+      "https://developer.ebay.com/api-docs/sell/inventory/resources/inventory_item/methods/createOrReplaceInventoryItem",
+    path: "/sell/inventory/v1/inventory_item/{sku}",
+    method: "PUT",
+    sandboxSupported: true,
+    requiredScopes: ["https://api.ebay.com/oauth/api_scope/sell.inventory"],
+    notes: [
+      "This write call changes inventory data for the selected seller account.",
+      "Review the payload carefully before using production credentials.",
+    ],
+    fields: [
+      {
+        key: "sku",
+        label: "SKU",
+        location: "path",
+        required: true,
+        placeholder: "318101253980",
+        description: "The seller-defined SKU that will be created or replaced.",
+      },
+      {
+        key: "bodyJson",
+        label: "Request Body JSON",
+        location: "body",
+        type: "textarea",
+        required: true,
+        defaultValue: INVENTORY_ITEM_BODY_TEMPLATE,
+        placeholder: INVENTORY_ITEM_BODY_TEMPLATE,
+        description: "Paste a valid JSON inventory item payload from the eBay documentation.",
+      },
+    ],
+  },
+  {
+    id: "inventory-delete-item",
+    apiFamily: "inventory",
+    title: "deleteInventoryItem",
+    summary:
+      "Delete an inventory item record for a seller-defined SKU.",
+    docsUrl:
+      "https://developer.ebay.com/api-docs/sell/inventory/resources/inventory_item/methods/deleteInventoryItem",
+    path: "/sell/inventory/v1/inventory_item/{sku}",
+    method: "DELETE",
+    sandboxSupported: true,
+    requiredScopes: ["https://api.ebay.com/oauth/api_scope/sell.inventory"],
+    notes: [
+      "This write call permanently deletes the inventory item record for the SKU.",
+    ],
+    fields: [
+      {
+        key: "sku",
+        label: "SKU",
+        location: "path",
+        required: true,
+        placeholder: "318101253980",
+        description: "The seller-defined SKU to delete.",
+      },
+    ],
+  },
+  {
+    id: "inventory-create-offer",
+    apiFamily: "inventory",
+    title: "createOffer",
+    summary:
+      "Create a staged offer for a SKU that can later be published as a live eBay listing.",
+    docsUrl:
+      "https://developer.ebay.com/api-docs/sell/inventory/resources/offer/methods/createOffer",
+    path: "/sell/inventory/v1/offer",
+    method: "POST",
+    sandboxSupported: true,
+    requiredScopes: ["https://api.ebay.com/oauth/api_scope/sell.inventory"],
+    notes: [
+      "This write call stages a listing offer and returns an offer ID on success.",
+    ],
+    fields: [
+      {
+        key: "bodyJson",
+        label: "Request Body JSON",
+        location: "body",
+        type: "textarea",
+        required: true,
+        defaultValue: OFFER_BODY_TEMPLATE,
+        placeholder: OFFER_BODY_TEMPLATE,
+        description: "Paste a valid JSON offer payload from the eBay documentation.",
+      },
+    ],
+  },
+  {
+    id: "inventory-publish-offer",
+    apiFamily: "inventory",
+    title: "publishOffer",
+    summary:
+      "Publish a staged single-variation offer to create or revise a live eBay listing.",
+    docsUrl:
+      "https://developer.ebay.com/api-docs/sell/inventory/resources/offer/methods/publishOffer",
+    path: "/sell/inventory/v1/offer/{offerId}/publish",
+    method: "POST",
+    sandboxSupported: true,
+    requiredScopes: ["https://api.ebay.com/oauth/api_scope/sell.inventory"],
+    notes: [
+      "This write call can create or revise a live listing.",
+    ],
+    fields: [
+      {
+        key: "offerId",
+        label: "Offer ID",
+        location: "path",
+        required: true,
+        placeholder: "123456789012",
+        description: "The staged offer ID to publish.",
+      },
+    ],
+  },
+  {
+    id: "inventory-delete-offer",
+    apiFamily: "inventory",
+    title: "deleteOffer",
+    summary:
+      "Delete an unpublished offer or end/remove the listing variation tied to an offer ID.",
+    docsUrl:
+      "https://developer.ebay.com/api-docs/sell/inventory/resources/offer/methods/deleteOffer",
+    path: "/sell/inventory/v1/offer/{offerId}",
+    method: "DELETE",
+    sandboxSupported: true,
+    requiredScopes: ["https://api.ebay.com/oauth/api_scope/sell.inventory"],
+    notes: [
+      "This write call can end a live listing or remove a variation from a listing.",
+    ],
+    fields: [
+      {
+        key: "offerId",
+        label: "Offer ID",
+        location: "path",
+        required: true,
+        placeholder: "123456789012",
+        description: "The offer ID to delete.",
+      },
+    ],
+  },
+  {
+    id: "inventory-bulk-create-or-replace-items",
+    apiFamily: "inventory",
+    title: "bulkCreateOrReplaceInventoryItem",
+    summary:
+      "Create or replace up to 25 inventory items in a single request payload.",
+    docsUrl:
+      "https://developer.ebay.com/api-docs/sell/inventory/resources/inventory_item/methods/bulkCreateOrReplaceInventoryItem",
+    path: "/sell/inventory/v1/bulk_create_or_replace_inventory_item",
+    method: "POST",
+    sandboxSupported: true,
+    requiredScopes: ["https://api.ebay.com/oauth/api_scope/sell.inventory"],
+    notes: [
+      "This write call updates seller inventory records in bulk.",
+    ],
+    fields: [
+      {
+        key: "bodyJson",
+        label: "Request Body JSON",
+        location: "body",
+        type: "textarea",
+        required: true,
+        defaultValue: BULK_INVENTORY_ITEMS_BODY_TEMPLATE,
+        placeholder: BULK_INVENTORY_ITEMS_BODY_TEMPLATE,
+        description: "Paste a valid JSON bulk inventory payload from the eBay documentation.",
+      },
+    ],
+  },
+  {
+    id: "inventory-create-or-replace-item-group",
+    apiFamily: "inventory",
+    title: "createOrReplaceInventoryItemGroup",
+    summary:
+      "Create or replace an inventory item group used for a multiple-variation listing.",
+    docsUrl:
+      "https://developer.ebay.com/api-docs/sell/inventory/resources/inventory_item_group/methods/createOrReplaceInventoryItemGroup",
+    path: "/sell/inventory/v1/inventory_item_group/{inventoryItemGroupKey}",
+    method: "PUT",
+    sandboxSupported: true,
+    requiredScopes: ["https://api.ebay.com/oauth/api_scope/sell.inventory"],
+    notes: [
+      "This write call updates multiple-variation listing group data.",
+    ],
+    fields: [
+      {
+        key: "inventoryItemGroupKey",
+        label: "Inventory Item Group Key",
+        location: "path",
+        required: true,
+        placeholder: "YOUR_GROUP_KEY",
+        description: "The unique identifier for the inventory item group.",
+      },
+      {
+        key: "bodyJson",
+        label: "Request Body JSON",
+        location: "body",
+        type: "textarea",
+        required: true,
+        defaultValue: INVENTORY_ITEM_GROUP_BODY_TEMPLATE,
+        placeholder: INVENTORY_ITEM_GROUP_BODY_TEMPLATE,
+        description: "Paste a valid JSON inventory item group payload from the eBay documentation.",
+      },
+    ],
+  },
+  {
+    id: "inventory-bulk-create-offer",
+    apiFamily: "inventory",
+    title: "bulkCreateOffer",
+    summary:
+      "Create up to 25 staged offers in one request.",
+    docsUrl:
+      "https://developer.ebay.com/api-docs/sell/inventory/resources/offer/methods/bulkCreateOffer",
+    path: "/sell/inventory/v1/bulk_create_offer",
+    method: "POST",
+    sandboxSupported: true,
+    requiredScopes: ["https://api.ebay.com/oauth/api_scope/sell.inventory"],
+    notes: [
+      "This write call stages multiple offers in one API request.",
+    ],
+    fields: [
+      {
+        key: "bodyJson",
+        label: "Request Body JSON",
+        location: "body",
+        type: "textarea",
+        required: true,
+        defaultValue: BULK_CREATE_OFFER_BODY_TEMPLATE,
+        placeholder: BULK_CREATE_OFFER_BODY_TEMPLATE,
+        description: "Paste a valid JSON bulk offer payload from the eBay documentation.",
+      },
+    ],
+  },
+  {
+    id: "inventory-bulk-update-price-quantity",
+    apiFamily: "inventory",
+    title: "bulkUpdatePriceQuantity",
+    summary:
+      "Update the total available quantity for a SKU and/or the price and quantity of its offers.",
+    docsUrl:
+      "https://developer.ebay.com/api-docs/sell/inventory/resources/inventory_item/methods/bulkUpdatePriceQuantity",
+    path: "/sell/inventory/v1/bulk_update_price_quantity",
+    method: "POST",
+    sandboxSupported: true,
+    requiredScopes: ["https://api.ebay.com/oauth/api_scope/sell.inventory"],
+    notes: [
+      "This write call can revise live offer prices and quantities.",
+    ],
+    fields: [
+      {
+        key: "bodyJson",
+        label: "Request Body JSON",
+        location: "body",
+        type: "textarea",
+        required: true,
+        defaultValue: BULK_UPDATE_PRICE_QUANTITY_BODY_TEMPLATE,
+        placeholder: BULK_UPDATE_PRICE_QUANTITY_BODY_TEMPLATE,
+        description:
+          "Paste a valid JSON bulk price and quantity payload from the eBay documentation.",
+      },
+    ],
+  },
+  {
+    id: "inventory-publish-offer-by-group",
+    apiFamily: "inventory",
+    title: "publishOfferByInventoryItemGroup",
+    summary:
+      "Publish all staged offers in an inventory item group as a multiple-variation listing.",
+    docsUrl:
+      "https://developer.ebay.com/api-docs/sell/inventory/resources/offer/methods/publishOfferByInventoryItemGroup",
+    path: "/sell/inventory/v1/offer/publish_by_inventory_item_group",
+    method: "POST",
+    sandboxSupported: true,
+    requiredScopes: ["https://api.ebay.com/oauth/api_scope/sell.inventory"],
+    notes: [
+      "This write call can create a live multiple-variation listing.",
+    ],
+    fields: [
+      {
+        key: "bodyJson",
+        label: "Request Body JSON",
+        location: "body",
+        type: "textarea",
+        required: true,
+        defaultValue: PUBLISH_BY_GROUP_BODY_TEMPLATE,
+        placeholder: PUBLISH_BY_GROUP_BODY_TEMPLATE,
+        description: "Paste a valid JSON publish-by-group payload from the eBay documentation.",
+      },
+    ],
+  },
+  {
     id: "browse-get-item-by-legacy-id",
     apiFamily: "browse",
     title: "getItemByLegacyId",
@@ -267,6 +760,7 @@ export const API_CALLS: ApiCallDefinition[] = [
       "https://developer.ebay.com/api-docs/buy/browse/resources/item/methods/getItemByLegacyId",
     path: "/buy/browse/v1/item/get_item_by_legacy_id",
     method: "GET",
+    authFlow: "application",
     sandboxSupported: true,
     requiredScopes: ["https://api.ebay.com/oauth/api_scope"],
     notes: [
@@ -445,6 +939,7 @@ export const API_CALLS: ApiCallDefinition[] = [
       "https://developer.ebay.com/api-docs/commerce/taxonomy/resources/category_tree/methods/getDefaultCategoryTreeId",
     path: "/commerce/taxonomy/v1/get_default_category_tree_id",
     method: "GET",
+    authFlow: "application",
     sandboxSupported: true,
     requiredScopes: ["https://api.ebay.com/oauth/api_scope"],
     notes: [
@@ -473,6 +968,7 @@ export const API_CALLS: ApiCallDefinition[] = [
       "https://developer.ebay.com/api-docs/commerce/taxonomy/resources/category_tree/methods/getCategorySuggestions",
     path: "/commerce/taxonomy/v1/category_tree/{category_tree_id}/get_category_suggestions",
     method: "GET",
+    authFlow: "application",
     sandboxSupported: false,
     requiredScopes: ["https://api.ebay.com/oauth/api_scope"],
     notes: [
@@ -508,6 +1004,7 @@ export const API_CALLS: ApiCallDefinition[] = [
       "https://developer.ebay.com/api-docs/commerce/taxonomy/resources/category_tree/methods/getItemAspectsForCategory",
     path: "/commerce/taxonomy/v1/category_tree/{category_tree_id}/get_item_aspects_for_category",
     method: "GET",
+    authFlow: "application",
     sandboxSupported: true,
     requiredScopes: ["https://api.ebay.com/oauth/api_scope"],
     notes: [
@@ -627,6 +1124,76 @@ export const API_CALLS: ApiCallDefinition[] = [
     ],
   },
   {
+    id: "fulfillment-create-shipping-fulfillment",
+    apiFamily: "fulfillment",
+    title: "createShippingFulfillment",
+    summary:
+      "Create a shipping fulfillment record for an order using shipment and tracking details.",
+    docsUrl:
+      "https://developer.ebay.com/api-docs/sell/fulfillment/resources/order/shipping_fulfillment/methods/createShippingFulfillment",
+    path: "/sell/fulfillment/v1/order/{orderId}/shipping_fulfillment",
+    method: "POST",
+    sandboxSupported: true,
+    requiredScopes: ["https://api.ebay.com/oauth/api_scope/sell.fulfillment"],
+    notes: [
+      "This write call records shipment activity for an order.",
+    ],
+    fields: [
+      {
+        key: "orderId",
+        label: "Order ID",
+        location: "path",
+        required: true,
+        placeholder: "12-34567-89012",
+        description: "The unique order ID that the shipping fulfillment belongs to.",
+      },
+      {
+        key: "bodyJson",
+        label: "Request Body JSON",
+        location: "body",
+        type: "textarea",
+        required: true,
+        defaultValue: SHIPPING_FULFILLMENT_BODY_TEMPLATE,
+        placeholder: SHIPPING_FULFILLMENT_BODY_TEMPLATE,
+        description: "Paste a valid JSON shipping fulfillment payload from the eBay documentation.",
+      },
+    ],
+  },
+  {
+    id: "fulfillment-get-shipping-fulfillment",
+    apiFamily: "fulfillment",
+    title: "getShippingFulfillment",
+    summary:
+      "Retrieve one specific shipping fulfillment for an order.",
+    docsUrl:
+      "https://developer.ebay.com/api-docs/sell/fulfillment/resources/order/shipping_fulfillment/methods/getShippingFulfillment",
+    path: "/sell/fulfillment/v1/order/{orderId}/shipping_fulfillment/{fulfillmentId}",
+    method: "GET",
+    sandboxSupported: true,
+    requiredScopes: [
+      "https://api.ebay.com/oauth/api_scope/sell.fulfillment",
+      "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
+    ],
+    fields: [
+      {
+        key: "orderId",
+        label: "Order ID",
+        location: "path",
+        required: true,
+        placeholder: "12-34567-89012",
+        description: "The unique order ID associated with the fulfillment.",
+      },
+      {
+        key: "fulfillmentId",
+        label: "Fulfillment ID",
+        location: "path",
+        required: true,
+        placeholder: "6543210000",
+        description: "The unique shipping fulfillment ID returned by eBay.",
+      },
+    ],
+  },
+  {
     id: "fulfillment-get-shipping-fulfillments",
     apiFamily: "fulfillment",
     title: "getShippingFulfillments",
@@ -649,6 +1216,101 @@ export const API_CALLS: ApiCallDefinition[] = [
         required: true,
         placeholder: "12-34567-89012",
         description: "The unique order ID whose shipping fulfillments should be returned.",
+      },
+    ],
+  },
+  {
+    id: "fulfillment-issue-refund",
+    apiFamily: "fulfillment",
+    title: "issueRefund",
+    summary:
+      "Issue an order-level or line-item-level refund against an order.",
+    docsUrl:
+      "https://developer.ebay.com/api-docs/sell/fulfillment/resources/order/methods/issueRefund",
+    path: "/sell/fulfillment/v1/order/{orderId}/issue_refund",
+    method: "POST",
+    sandboxSupported: true,
+    requiredScopes: ["https://api.ebay.com/oauth/api_scope/sell.fulfillment"],
+    notes: [
+      "This write call triggers a real refund action for the specified order.",
+    ],
+    fields: [
+      {
+        key: "orderId",
+        label: "Order ID",
+        location: "path",
+        required: true,
+        placeholder: "12-34567-89012",
+        description: "The unique order ID that the refund applies to.",
+      },
+      {
+        key: "bodyJson",
+        label: "Request Body JSON",
+        location: "body",
+        type: "textarea",
+        required: true,
+        defaultValue: ISSUE_REFUND_BODY_TEMPLATE,
+        placeholder: ISSUE_REFUND_BODY_TEMPLATE,
+        description: "Paste a valid JSON refund payload from the eBay documentation.",
+      },
+    ],
+  },
+  {
+    id: "fulfillment-get-payment-dispute-summaries",
+    apiFamily: "fulfillment",
+    title: "getPaymentDisputeSummaries",
+    summary:
+      "Retrieve a paginated list of payment disputes for the seller account.",
+    docsUrl:
+      "https://developer.ebay.com/api-docs/sell/fulfillment/resources/payment_dispute_summary/methods/getPaymentDisputeSummaries",
+    path: "/sell/fulfillment/v1/payment_dispute_summary",
+    method: "GET",
+    apiHost: "apiz",
+    authFlow: "application",
+    sandboxSupported: true,
+    requiredScopes: ["https://api.ebay.com/oauth/api_scope/sell.payment.dispute"],
+    fields: [
+      {
+        key: "limit",
+        label: "Limit",
+        location: "query",
+        type: "number",
+        defaultValue: "25",
+        placeholder: "25",
+        description: "How many dispute summaries to return in this page.",
+      },
+      {
+        key: "offset",
+        label: "Offset",
+        location: "query",
+        type: "number",
+        defaultValue: "0",
+        placeholder: "0",
+        description: "How many dispute summaries to skip before the page starts.",
+      },
+    ],
+  },
+  {
+    id: "fulfillment-get-payment-dispute",
+    apiFamily: "fulfillment",
+    title: "getPaymentDispute",
+    summary:
+      "Retrieve the full details of one payment dispute.",
+    docsUrl:
+      "https://developer.ebay.com/api-docs/sell/fulfillment/resources/payment_dispute/methods/getPaymentDispute",
+    path: "/sell/fulfillment/v1/payment_dispute/{payment_dispute_id}",
+    method: "GET",
+    apiHost: "apiz",
+    sandboxSupported: true,
+    requiredScopes: ["https://api.ebay.com/oauth/api_scope/sell.payment.dispute"],
+    fields: [
+      {
+        key: "payment_dispute_id",
+        label: "Payment Dispute ID",
+        location: "path",
+        required: true,
+        placeholder: "1234567890",
+        description: "The unique payment dispute ID returned by getPaymentDisputeSummaries.",
       },
     ],
   },
@@ -676,7 +1338,8 @@ export function buildRequestUrl(
     path = path.replace(`{${field.key}}`, encodeURIComponent(rawValue));
   }
 
-  const url = new URL(`${EBAY_BASE_URLS[environment]}${path}`);
+  const apiHost = call.apiHost ?? "api";
+  const url = new URL(`${EBAY_BASE_URLS[apiHost][environment]}${path}`);
 
   for (const field of call.fields.filter((entry) => entry.location === "query")) {
     const rawValue = params[field.key]?.trim() ?? "";
@@ -707,6 +1370,21 @@ export function buildRequestBody(
   const bodyFields = call.fields.filter((field) => field.location === "body");
   if (bodyFields.length === 0) {
     return undefined;
+  }
+
+  if (bodyFields.length === 1 && bodyFields[0]?.key === "bodyJson") {
+    const rawBody = params.bodyJson?.trim();
+    if (!rawBody) {
+      return undefined;
+    }
+
+    try {
+      return JSON.parse(rawBody);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unknown JSON parsing error.";
+      throw new Error(`Request Body JSON must be valid JSON.\n\n${message}`);
+    }
   }
 
   return Object.fromEntries(

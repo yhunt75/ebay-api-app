@@ -74,14 +74,10 @@ function getConfigFieldCandidates(
         "EBAY_CERT_ID",
       ];
     case "userAccessToken":
-      return [
-        ...environmentPrefixes.flatMap((prefix) => [
-          `${prefix}_USER_ACCESS_TOKEN`,
-          `EBAY_${prefix}_USER_ACCESS_TOKEN`,
-        ]),
-        "USER_ACCESS_TOKEN",
-        "EBAY_USER_ACCESS_TOKEN",
-      ];
+      return environmentPrefixes.flatMap((prefix) => [
+        `${prefix}_USER_ACCESS_TOKEN`,
+        `EBAY_${prefix}_USER_ACCESS_TOKEN`,
+      ]);
     default:
       return [];
   }
@@ -106,33 +102,29 @@ function resolveConfig(config?: Partial<EnvironmentConfig>): EnvironmentConfig {
 
   return {
     environment,
-    appId: getConfigValueFromEnv("appId", environment) || config?.appId?.trim() || "",
-    devId: getConfigValueFromEnv("devId", environment) || config?.devId?.trim() || "",
-    certId: getConfigValueFromEnv("certId", environment) || config?.certId?.trim() || "",
+    appId: config?.appId?.trim() || getConfigValueFromEnv("appId", environment) || "",
+    devId: config?.devId?.trim() || getConfigValueFromEnv("devId", environment) || "",
+    certId: config?.certId?.trim() || getConfigValueFromEnv("certId", environment) || "",
     userAccessToken:
-      getConfigValueFromEnv("userAccessToken", environment) ||
       config?.userAccessToken?.trim() ||
+      getConfigValueFromEnv("userAccessToken", environment) ||
       "",
     requestLocale:
+      config?.requestLocale?.trim() ||
       process.env.REQUEST_LOCALE?.trim() ||
       process.env.ACCEPT_LANGUAGE?.trim() ||
-      config?.requestLocale?.trim() ||
       "en-US",
     oauthUserScopes:
-      process.env.OAUTH_USER_SCOPES?.trim() || config?.oauthUserScopes?.trim() || "",
+      config?.oauthUserScopes?.trim() || process.env.OAUTH_USER_SCOPES?.trim() || "",
     oauthAuthorizeUrlBase:
-      process.env.OAUTH_AUTHORIZE_URL_BASE?.trim() ||
       config?.oauthAuthorizeUrlBase?.trim() ||
+      process.env.OAUTH_AUTHORIZE_URL_BASE?.trim() ||
       "https://auth.ebay.com/oauth2/authorize",
   };
 }
 
 function usesApplicationToken(call: ApiCallDefinition) {
-  return call.requiredScopes.some(
-    (scope) =>
-      scope === "https://api.ebay.com/oauth/api_scope" &&
-      !scope.includes("/sell."),
-  );
+  return call.authFlow === "application";
 }
 
 async function getApplicationAccessToken(
@@ -233,12 +225,28 @@ export async function POST(request: NextRequest) {
   }
 
   const requestUrl = buildRequestUrl(call, config.environment, params);
-  const requestBody = buildRequestBody(call, params);
+
+  let requestBody: unknown;
+  try {
+    requestBody = buildRequestBody(call, params);
+  } catch (error) {
+    return errorResponse(
+      error instanceof Error ? error.message : "Unable to parse the request body.",
+    );
+  }
 
   try {
-    const accessToken = usesApplicationToken(call)
-      ? await getApplicationAccessToken(call, config)
-      : normalizeAccessToken(config.userAccessToken ?? "");
+    let accessToken = normalizeAccessToken(config.userAccessToken ?? "");
+
+    if (usesApplicationToken(call)) {
+      try {
+        accessToken = await getApplicationAccessToken(call, config);
+      } catch (error) {
+        if (!accessToken) {
+          throw error;
+        }
+      }
+    }
 
     const headers = new Headers({
       Accept: "application/json",
@@ -247,7 +255,7 @@ export async function POST(request: NextRequest) {
       "Content-Language": requestLocale,
     });
 
-    if (call.method === "POST") {
+    if (requestBody !== undefined && (call.method === "POST" || call.method === "PUT")) {
       headers.set("Content-Type", "application/json");
     }
 
@@ -261,7 +269,10 @@ export async function POST(request: NextRequest) {
     const ebayResponse = await fetch(requestUrl, {
       method: call.method,
       headers,
-      body: call.method === "POST" ? JSON.stringify(requestBody) : undefined,
+      body:
+        requestBody !== undefined && (call.method === "POST" || call.method === "PUT")
+          ? JSON.stringify(requestBody)
+          : undefined,
       cache: "no-store",
     });
 
