@@ -283,6 +283,11 @@ pre {
   line-height: 1.5;
 }
 
+.field-status {
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .field--wide {
   grid-column: 1 / -1;
 }

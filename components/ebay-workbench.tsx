@@ -112,6 +112,11 @@ function parseEnvFile(contents: string) {
   return nextConfig;
 }
 
+function parseItemIdFromUrl(value: string) {
+  const match = value.match(/\/itm\/([^/?#]+)/i);
+  return match?.[1]?.trim() ?? "";
+}
+
 function fieldInput(
   field: ApiFieldDefinition,
   value: string,
@@ -161,6 +166,8 @@ export function EbayWorkbench() {
   const [noticeAlert, setNoticeAlert] = useState<AlertState | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDraggingEnvFile, setIsDraggingEnvFile] = useState(false);
+  const [inventoryItemUrl, setInventoryItemUrl] = useState("");
+  const [skuParsingStatus, setSkuParsingStatus] = useState("");
 
   const availableCalls = API_CALLS.filter((call) => call.apiFamily === selectedApi);
   const selectedCall =
@@ -220,6 +227,8 @@ export function EbayWorkbench() {
     setCallValues(getCallDefaults(selectedCall));
     setResponseState(null);
     setErrorAlert(null);
+    setInventoryItemUrl("");
+    setSkuParsingStatus("");
   }, [selectedCall]);
 
   function updateConfig<K extends keyof EnvironmentConfig>(
@@ -237,6 +246,16 @@ export function EbayWorkbench() {
       ...current,
       [key]: value,
     }));
+  }
+
+  function handleInventoryUrlChange(nextValue: string) {
+    setInventoryItemUrl(nextValue);
+
+    const parsedSku = parseItemIdFromUrl(nextValue);
+    updateCallValue("sku", parsedSku);
+
+    const nextStatus = parsedSku ? `Parsing ${parsedSku}...` : "";
+    setSkuParsingStatus(nextStatus);
   }
 
   async function loadEnvFile(file: File) {
@@ -294,6 +313,8 @@ export function EbayWorkbench() {
     setCallValues(getCallDefaults(selectedCall));
     setResponseState(null);
     setErrorAlert(null);
+    setInventoryItemUrl("");
+    setSkuParsingStatus("");
   }
 
   async function copyResponse() {
@@ -754,15 +775,50 @@ export function EbayWorkbench() {
                     </div>
                   ) : (
                     selectedCall.fields.map((field) => (
-                      <label key={field.key} className="field">
-                        <span>
-                          {field.label}
-                          {field.required ? " *" : ""}
-                        </span>
-                        {fieldInput(field, callValues[field.key] ?? "", (nextValue) =>
-                          updateCallValue(field.key, nextValue),
+                      <label
+                        key={field.key}
+                        className={`field ${
+                          selectedCall.apiFamily === "inventory" && field.key === "sku"
+                            ? "field--wide"
+                            : ""
+                        }`}
+                      >
+                        {selectedCall.apiFamily === "inventory" && field.key === "sku" ? (
+                          <>
+                            <span>
+                              Item URL
+                              {field.required ? " *" : ""}
+                            </span>
+                            <input
+                              className="input"
+                              type="text"
+                              inputMode="url"
+                              placeholder="https://www.ebay.com/itm/318101253980"
+                              spellCheck={false}
+                              value={inventoryItemUrl}
+                              onChange={(event) => handleInventoryUrlChange(event.target.value)}
+                            />
+                            {skuParsingStatus ? (
+                              <small className="field-status">{skuParsingStatus}</small>
+                            ) : null}
+                            <small>
+                              Copy the eBay item URL and paste it here. This workbench will parse
+                              the value after <code>/itm/</code> and use it as the SKU for this
+                              call.
+                            </small>
+                          </>
+                        ) : (
+                          <>
+                            <span>
+                              {field.label}
+                              {field.required ? " *" : ""}
+                            </span>
+                            {fieldInput(field, callValues[field.key] ?? "", (nextValue) =>
+                              updateCallValue(field.key, nextValue),
+                            )}
+                            <small>{field.description}</small>
+                          </>
                         )}
-                        <small>{field.description}</small>
                       </label>
                     ))
                   )}
