@@ -15,6 +15,7 @@ import {
   getCallDefaults,
   type ApiFamilyId,
   type ApiFieldDefinition,
+  type EbayEnvironment,
   type EnvironmentConfig,
 } from "@/lib/ebay-apis";
 
@@ -33,6 +34,34 @@ type ResponseState = {
 type AlertState = {
   title: string;
   detail?: string;
+};
+
+type CredentialField = "appId" | "devId" | "certId";
+type EnvironmentCredentialProfiles = Record<
+  EbayEnvironment,
+  Pick<EnvironmentConfig, CredentialField>
+>;
+type ParsedEnvFile = {
+  config: Partial<EnvironmentConfig>;
+  credentialProfiles: EnvironmentCredentialProfiles;
+  genericCredentials: Partial<Pick<EnvironmentConfig, CredentialField>>;
+};
+type SessionState = {
+  config: EnvironmentConfig;
+  credentialProfiles: EnvironmentCredentialProfiles;
+};
+
+const DEFAULT_CREDENTIAL_PROFILES: EnvironmentCredentialProfiles = {
+  production: {
+    appId: "",
+    devId: "",
+    certId: "",
+  },
+  sandbox: {
+    appId: "",
+    devId: "",
+    certId: "",
+  },
 };
 
 function findFamilyCall(familyId: ApiFamilyId) {
@@ -54,8 +83,105 @@ function stripWrappingQuotes(value: string) {
   return trimmed;
 }
 
-function parseEnvFile(contents: string) {
+function isCredentialField(value: string): value is CredentialField {
+  return value === "appId" || value === "devId" || value === "certId";
+}
+
+function getCredentialFieldFromKey(key: string): CredentialField | null {
+  switch (key) {
+    case "APP_ID":
+    case "EBAY_APP_ID":
+      return "appId";
+    case "DEV_ID":
+    case "EBAY_DEV_ID":
+      return "devId";
+    case "CERT_ID":
+    case "EBAY_CERT_ID":
+      return "certId";
+    default:
+      return null;
+  }
+}
+
+function getEnvironmentPrefix(prefix: string): EbayEnvironment | null {
+  switch (prefix) {
+    case "PRODUCTION":
+    case "PROD":
+    case "LIVE":
+      return "production";
+    case "SANDBOX":
+    case "SBX":
+      return "sandbox";
+    default:
+      return null;
+  }
+}
+
+function getCredentialMatch(rawKey: string) {
+  const upperKey = rawKey.toUpperCase();
+  const directField = getCredentialFieldFromKey(upperKey);
+  if (directField) {
+    return { field: directField, environment: null as EbayEnvironment | null };
+  }
+
+  const envSpecificMatch = upperKey.match(
+    /^(?:(EBAY)_)?(PRODUCTION|PROD|LIVE|SANDBOX|SBX)_(APP_ID|DEV_ID|CERT_ID)$/,
+  );
+  if (!envSpecificMatch) {
+    return null;
+  }
+
+  const [, maybeEbayPrefix, rawEnvironment, rawField] = envSpecificMatch;
+  const environment = getEnvironmentPrefix(rawEnvironment);
+  if (!environment) {
+    return null;
+  }
+
+  const field = getCredentialFieldFromKey(
+    maybeEbayPrefix ? `EBAY_${rawField}` : rawField,
+  );
+  if (!field) {
+    return null;
+  }
+
+  return { field, environment };
+}
+
+function mergeCredentialProfiles(
+  current: EnvironmentCredentialProfiles,
+  next: Partial<EnvironmentCredentialProfiles>,
+) {
+  return {
+    production: {
+      ...current.production,
+      ...next.production,
+    },
+    sandbox: {
+      ...current.sandbox,
+      ...next.sandbox,
+    },
+  };
+}
+
+function applyCredentialProfile(
+  config: EnvironmentConfig,
+  credentialProfiles: EnvironmentCredentialProfiles,
+  environment: EbayEnvironment,
+) {
+  return {
+    ...config,
+    environment,
+    ...credentialProfiles[environment],
+  };
+}
+
+function parseEnvFile(contents: string): ParsedEnvFile {
   const nextConfig: Partial<EnvironmentConfig> = {};
+  const credentialProfiles = {
+    production: { ...DEFAULT_CREDENTIAL_PROFILES.production },
+    sandbox: { ...DEFAULT_CREDENTIAL_PROFILES.sandbox },
+  };
+  const genericCredentials: Partial<Pick<EnvironmentConfig, CredentialField>> = {};
   const lines = contents.split(/\r?\n/);
 
   for (const line of lines) {
@@ -71,24 +197,22 @@ function parseEnvFile(contents: string) {
 
     const [, rawKey, rawValue] = match;
     const value = stripWrappingQuotes(rawValue);
+    const credentialMatch = getCredentialMatch(rawKey);
+
+    if (credentialMatch && isCredentialField(credentialMatch.field)) {
+      if (credentialMatch.environment) {
+        credentialProfiles[credentialMatch.environment][credentialMatch.field] = value;
+      } else {
+        genericCredentials[credentialMatch.field] = value;
+      }
+      continue;
+    }
 
     switch (rawKey.toUpperCase()) {
       case "EBAY_ENVIRONMENT":
       case "EBAY_ENV":
       case "ENVIRONMENT":
         nextConfig.environment = coerceEnvironment(value);
-        break;
-      case "APP_ID":
-      case "EBAY_APP_ID":
-        nextConfig.appId = value;
-        break;
-      case "DEV_ID":
-      case "EBAY_DEV_ID":
-        nextConfig.devId = value;
-        break;
-      case "CERT_ID":
-      case "EBAY_CERT_ID":
-        nextConfig.certId = value;
         break;
       case "USER_ACCESS_TOKEN":
       case "EBAY_USER_ACCESS_TOKEN":
@@ -109,7 +233,11 @@ function parseEnvFile(contents: string) {
     }
   }
 
-  return nextConfig;
+  return {
+    config: nextConfig,
+    credentialProfiles,
+    genericCredentials,
+  };
 }
 
 function parseItemIdFromUrl(value: string) {
@@ -154,6 +282,9 @@ function fieldInput(
 export function EbayWorkbench() {
   const [isHydrated, setIsHydrated] = useState(false);
   const [config, setConfig] = useState<EnvironmentConfig>(DEFAULT_ENVIRONMENT_CONFIG);
+  const [credentialProfiles, setCredentialProfiles] = useState<EnvironmentCredentialProfiles>(
+    DEFAULT_CREDENTIAL_PROFILES,
+  );
   const [selectedApi, setSelectedApi] = useState<ApiFamilyId>("inventory");
   const [selectedCallId, setSelectedCallId] = useState<string>(
     findFamilyCall("inventory").id,
@@ -189,14 +320,36 @@ export function EbayWorkbench() {
     const saved = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
     if (saved) {
       try {
-        const parsed = JSON.parse(saved) as Partial<EnvironmentConfig>;
-        setConfig((current) => ({
-          ...current,
-          ...parsed,
-          environment: parsed.environment
+        const parsed = JSON.parse(saved) as Partial<SessionState & EnvironmentConfig>;
+        const savedEnvironment = parsed.config?.environment
+          ? coerceEnvironment(parsed.config.environment)
+          : parsed.environment
             ? coerceEnvironment(parsed.environment)
-            : current.environment,
-        }));
+            : DEFAULT_ENVIRONMENT_CONFIG.environment;
+        const baseConfig = parsed.config
+          ? {
+              ...DEFAULT_ENVIRONMENT_CONFIG,
+              ...parsed.config,
+              environment: savedEnvironment,
+            }
+          : {
+              ...DEFAULT_ENVIRONMENT_CONFIG,
+              ...parsed,
+              environment: savedEnvironment,
+            };
+        const nextCredentialProfiles = mergeCredentialProfiles(
+          DEFAULT_CREDENTIAL_PROFILES,
+          parsed.credentialProfiles ?? {
+            [savedEnvironment]: {
+              appId: baseConfig.appId,
+              devId: baseConfig.devId,
+              certId: baseConfig.certId,
+            },
+          },
+        );
+
+        setCredentialProfiles(nextCredentialProfiles);
+        setConfig(applyCredentialProfile(baseConfig, nextCredentialProfiles, savedEnvironment));
       } catch {
         window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
       }
@@ -210,8 +363,13 @@ export function EbayWorkbench() {
       return;
     }
 
-    window.sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(config));
-  }, [config, isHydrated]);
+    const nextState: SessionState = {
+      config,
+      credentialProfiles,
+    };
+
+    window.sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(nextState));
+  }, [config, credentialProfiles, isHydrated]);
 
   useEffect(() => {
     if (!availableCalls.some((call) => call.id === selectedCallId)) {
@@ -241,6 +399,28 @@ export function EbayWorkbench() {
     }));
   }
 
+  function updateCredentialField(
+    key: CredentialField,
+    value: EnvironmentConfig[CredentialField],
+  ) {
+    setCredentialProfiles((current) => ({
+      ...current,
+      [config.environment]: {
+        ...current[config.environment],
+        [key]: value,
+      },
+    }));
+
+    setConfig((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  }
+
+  function handleEnvironmentChange(nextEnvironment: EbayEnvironment) {
+    setConfig((current) => applyCredentialProfile(current, credentialProfiles, nextEnvironment));
+  }
+
   function updateCallValue(key: string, value: string) {
     setCallValues((current) => ({
       ...current,
@@ -265,14 +445,32 @@ export function EbayWorkbench() {
 
     const contents = await file.text();
     const parsed = parseEnvFile(contents);
+    const nextEnvironment = parsed.config.environment ?? config.environment;
+    const parsedProfilesWithGeneric = mergeCredentialProfiles(parsed.credentialProfiles, {
+      [nextEnvironment]: parsed.genericCredentials,
+    });
 
-    setConfig((current) => ({
-      ...current,
-      ...parsed,
-      environment: parsed.environment ?? current.environment,
-    }));
+    setCredentialProfiles((current) => {
+      const nextProfiles = mergeCredentialProfiles(current, parsedProfilesWithGeneric);
+
+      setConfig((currentConfig) =>
+        applyCredentialProfile(
+          {
+            ...currentConfig,
+            ...parsed.config,
+            environment: nextEnvironment,
+          },
+          nextProfiles,
+          nextEnvironment,
+        ),
+      );
+
+      return nextProfiles;
+    });
     setNoticeAlert({
       title: `Loaded credentials from ${file.name} into this browser session.`,
+      detail:
+        "The form now keeps separate APP_ID, Dev_ID, and Cert_ID values for Production and Sandbox and swaps them automatically when you change environments.",
     });
     setErrorAlert(null);
   }
@@ -548,7 +746,7 @@ export function EbayWorkbench() {
                   className="input"
                   value={config.environment}
                   onChange={(event) =>
-                    updateConfig("environment", coerceEnvironment(event.target.value))
+                    handleEnvironmentChange(coerceEnvironment(event.target.value))
                   }
                 >
                   <option value="production">Production</option>
@@ -562,7 +760,7 @@ export function EbayWorkbench() {
                   className="input"
                   value={config.appId}
                   placeholder="Your eBay App ID"
-                  onChange={(event) => updateConfig("appId", event.target.value)}
+                  onChange={(event) => updateCredentialField("appId", event.target.value)}
                 />
               </label>
 
@@ -572,7 +770,7 @@ export function EbayWorkbench() {
                   className="input"
                   value={config.devId}
                   placeholder="Your eBay Dev ID"
-                  onChange={(event) => updateConfig("devId", event.target.value)}
+                  onChange={(event) => updateCredentialField("devId", event.target.value)}
                 />
               </label>
 
@@ -582,7 +780,7 @@ export function EbayWorkbench() {
                   className="input"
                   value={config.certId}
                   placeholder="Your eBay Cert ID"
-                  onChange={(event) => updateConfig("certId", event.target.value)}
+                  onChange={(event) => updateCredentialField("certId", event.target.value)}
                 />
               </label>
 
@@ -633,11 +831,13 @@ export function EbayWorkbench() {
               </label>
             </div>
 
-            <p className="microcopy">
-              APP_ID, Dev_ID, and Cert_ID are preserved for the browser session so the user can
-              swap calls without re-entering them. The live REST requests in this workbench use
-              the provided OAuth bearer token and a valid locale header such as <code>en-US</code>.
-            </p>
+              <p className="microcopy">
+                APP_ID, Dev_ID, and Cert_ID are preserved for the browser session so the user can
+                swap calls without re-entering them. Production and Sandbox credential sets are
+                stored separately, and changing the environment dropdown loads the matching values
+                automatically. The live REST requests in this workbench use the provided OAuth
+                bearer token and a valid locale header such as <code>en-US</code>.
+              </p>
           </div>
 
           <div className="panel">
