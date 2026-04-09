@@ -2,6 +2,8 @@
 
 import {
   useEffect,
+  useId,
+  useRef,
   useState,
   type ChangeEvent,
   type DragEvent,
@@ -286,6 +288,8 @@ function fieldInput(
 }
 
 export function EbayWorkbench() {
+  const envFileInputId = useId();
+  const envDragDepthRef = useRef(0);
   const [isHydrated, setIsHydrated] = useState(false);
   const [config, setConfig] = useState<EnvironmentConfig>(DEFAULT_ENVIRONMENT_CONFIG);
   const [credentialProfiles, setCredentialProfiles] = useState<EnvironmentCredentialProfiles>(
@@ -492,18 +496,29 @@ export function EbayWorkbench() {
     event.target.value = "";
   }
 
+  function handleEnvDragEnter(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+    envDragDepthRef.current += 1;
+    setIsDraggingEnvFile(true);
+  }
+
   function handleEnvDragOver(event: DragEvent<HTMLLabelElement>) {
     event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
     setIsDraggingEnvFile(true);
   }
 
   function handleEnvDragLeave(event: DragEvent<HTMLLabelElement>) {
     event.preventDefault();
-    setIsDraggingEnvFile(false);
+    envDragDepthRef.current = Math.max(0, envDragDepthRef.current - 1);
+    if (envDragDepthRef.current === 0) {
+      setIsDraggingEnvFile(false);
+    }
   }
 
   async function handleEnvDrop(event: DragEvent<HTMLLabelElement>) {
     event.preventDefault();
+    envDragDepthRef.current = 0;
     setIsDraggingEnvFile(false);
 
     const file = event.dataTransfer.files?.[0];
@@ -701,17 +716,25 @@ export function EbayWorkbench() {
                 <h2>Environment and credentials</h2>
               </div>
               <label
+                htmlFor={envFileInputId}
                 className={`upload-pill upload-pill--dropzone ${
                   isDraggingEnvFile ? "upload-pill--active" : ""
                 }`}
+                onDragEnter={handleEnvDragEnter}
                 onDragOver={handleEnvDragOver}
                 onDragLeave={handleEnvDragLeave}
                 onDrop={handleEnvDrop}
               >
                 <span>Drop `.env` here or click to upload</span>
                 <small>Supports drag and drop for local environment files.</small>
-                <input type="file" accept=".env,text/plain" onChange={handleEnvUpload} />
               </label>
+              <input
+                id={envFileInputId}
+                className="upload-pill__input"
+                type="file"
+                accept=".env,text/plain"
+                onChange={handleEnvUpload}
+              />
             </div>
 
             <div className="utility-card">
