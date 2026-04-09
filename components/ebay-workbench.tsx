@@ -19,6 +19,8 @@ import {
 } from "@/lib/ebay-apis";
 
 const SESSION_STORAGE_KEY = "ebay-inventory-workbench:env";
+const FINDER_ENV_COMMAND =
+  "defaults write com.apple.finder AppleShowAllFiles -bool true && killall Finder";
 
 type ResponseState = {
   ok: boolean;
@@ -305,6 +307,15 @@ export function EbayWorkbench() {
     });
   }
 
+  async function copyFinderCommand() {
+    await navigator.clipboard.writeText(FINDER_ENV_COMMAND);
+    setNoticeAlert({
+      title: "Copied the Finder command to the clipboard.",
+      detail:
+        "Run it in Terminal to show hidden files in Finder, including .env files in this workspace.",
+    });
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsSubmitting(true);
@@ -574,6 +585,38 @@ export function EbayWorkbench() {
               swap calls without re-entering them. The live REST requests in this workbench use
               the provided OAuth bearer token and a valid locale header such as <code>en-US</code>.
             </p>
+
+            <div className="utility-card">
+              <div className="utility-card__header">
+                <div>
+                  <p className="eyebrow">Finder Tip</p>
+                  <h3>Show `.env` files in Finder</h3>
+                </div>
+                <button
+                  type="button"
+                  className="icon-button"
+                  onClick={copyFinderCommand}
+                  aria-label="Copy Finder command"
+                  title="Copy Finder command"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      d="M9 9h9v11H9zM6 4h9v3H8v9H6z"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+              </div>
+              <p>
+                Use this Terminal command to make hidden files visible in Finder so you can locate
+                your local <code>.env</code> file quickly.
+              </p>
+              <pre className="command-block">{FINDER_ENV_COMMAND}</pre>
+            </div>
           </div>
 
           <div className="panel">
