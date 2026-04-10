@@ -40,9 +40,7 @@ function resolveEnvironment(config?: Partial<EnvironmentConfig>) {
 }
 
 function getEnvironmentPrefixes(environment: EnvironmentConfig["environment"]) {
-  return environment === "sandbox"
-    ? ["SANDBOX", "SBX"]
-    : ["PRODUCTION", "PROD", "LIVE"];
+  return environment === "sandbox" ? ["SANDBOX"] : ["PRODUCTION"];
 }
 
 function getConfigFieldCandidates(
@@ -145,7 +143,8 @@ async function getApplicationAccessToken(
   const tokenResponse = await fetch(oauthUrl, {
     method: "POST",
     headers: {
-      Authorization: `Basic ${credentials}`,
+      Authorization: `Bearer ${credentials}`,
+      // Authorization: `Basic ${credentials}`,
       "Content-Type": "application/x-www-form-urlencoded",
       Accept: "application/json",
     },

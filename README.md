@@ -11,7 +11,7 @@ A Next.js App Router app for exploring core seller-facing eBay APIs from one UI:
 The interface lets a user:
 
 - choose `sandbox` or `production`
-- paste their `APP_ID`, `Dev_ID`, `Cert_ID`, `PRODUCTION_USER_ACCESS_TOKEN`, `REQUEST_LOCALE`, `OAUTH_USER_SCOPES`, and `OAUTH_AUTHORIZE_URL_BASE`
+- paste their `PRODUCTION_APP_ID`, `PRODUCTION_DEV_ID`, `PRODUCTION_CERT_ID`, `PRODUCTION_USER_ACCESS_TOKEN`, `REQUEST_LOCALE`, `OAUTH_USER_SCOPES`, and `OAUTH_AUTHORIZE_URL_BASE`
 - optionally upload a `.env` file to populate those values
 - select a documented API call from a dropdown
 - fill in the required method inputs
@@ -75,10 +75,14 @@ The upload control parses these keys from a local `.env` file:
 
 ```env
 EBAY_ENVIRONMENT=production
-APP_ID=
-DEV_ID=
-CERT_ID=
+PRODUCTION_APP_ID=
+PRODUCTION_DEV_ID=
+PRODUCTION_CERT_ID=
 PRODUCTION_USER_ACCESS_TOKEN=
+SANDBOX_APP_ID=
+SANDBOX_DEV_ID=
+SANDBOX_CERT_ID=
+SANDBOX_USER_ACCESS_TOKEN=
 REQUEST_LOCALE=en-US
 OAUTH_USER_SCOPES="https://api.ebay.com/oauth/api_scope/sell.inventory.readonly https://api.ebay.com/oauth/api_scope/sell.account.readonly"
 OAUTH_AUTHORIZE_URL_BASE=https://auth.ebay.com/oauth2/authorize
