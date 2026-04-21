@@ -7,6 +7,7 @@ A Next.js App Router app for exploring core seller-facing eBay APIs from one UI:
 - Taxonomy API
 - Fulfillment API
 - Browse API fallback for legacy listing IDs
+- Trading API Messaging calls
 
 The interface lets a user:
 
@@ -51,6 +52,12 @@ The interface lets a user:
 - `getOrders`
 - `getOrder`
 - `getShippingFulfillments`
+
+### Messaging API
+
+- `GetMemberMessages`
+- `GetMyMessages`
+- `AddMemberMessageAAQToPartner`
 
 ## Local development
 
@@ -115,6 +122,15 @@ This repository also includes a [`vercel.json`](./vercel.json) file that pins th
 
 No server-side environment variables are required because the app accepts runtime credentials from the user interface and sends the selected call through the built-in `/api/ebay` proxy route.
 
+## Messaging implementation notes
+
+- The messaging workflow in this app uses the eBay Trading API member-communication calls, which are XML-based and authenticated with the user access token in the `X-EBAY-API-IAF-TOKEN` header.
+- `GetMemberMessages` and `GetMyMessages` are included for inbox retrieval and message polling workflows.
+- `AddMemberMessageAAQToPartner` is included for buyer or seller order-partner messaging.
+- eBay documents `AddMemberMessageAAQToPartner` as unsupported in Sandbox, so production data is required to live-test message sending.
+- The message recipient for `AddMemberMessageAAQToPartner` is an eBay username or public user ID, not an email address.
+- The app wraps Trading XML responses in JSON and surfaces `Ack`, `CorrelationID`, parsed error blocks, and the raw XML payload for debugging.
+
 ## Documentation references
 
 These app behaviors are based on the official eBay developer docs:
@@ -136,3 +152,7 @@ These app behaviors are based on the official eBay developer docs:
 - [getOrders](https://developer.ebay.com/api-docs/sell/fulfillment/resources/order/methods/getOrders)
 - [getOrder](https://developer.ebay.com/api-docs/sell/fulfillment/resources/order/methods/getOrder)
 - [getShippingFulfillments](https://developer.ebay.com/api-docs/sell/fulfillment/resources/order/shipping_fulfillment/methods/getShippingFulfillments)
+- [GetMemberMessages](https://developer.ebay.com/devzone/XML/docs/Reference/ebay/GetMemberMessages.html)
+- [GetMyMessages](https://developer.ebay.com/devzone/xml/docs/Reference/ebay/GetMyMessages.html)
+- [AddMemberMessageAAQToPartner](https://developer.ebay.com/devzone/xml/docs/Reference/ebay/AddMemberMessageAAQToPartner.html)
+- [Using OAuth with the eBay traditional APIs](https://developer.ebay.com/api-docs/static/oauth-trad-apis.html)

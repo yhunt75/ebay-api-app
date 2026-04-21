@@ -91,6 +91,11 @@ function normalizeUserAccessToken(value: string) {
   return value.trim().replace(/^Bearer\s+/i, "");
 }
 
+function generateRandomSku() {
+  const suffix = Math.random().toString(36).slice(2, 10).toUpperCase();
+  return `SKU-${suffix}`;
+}
+
 function isCredentialField(value: string): value is CredentialField {
   return (
     value === "appId" ||
@@ -325,6 +330,10 @@ export function EbayWorkbench() {
     availableCalls.find((call) => call.id === selectedCallId) ?? availableCalls[0];
   const selectedFamily =
     API_FAMILIES.find((family) => family.id === selectedApi) ?? API_FAMILIES[0];
+  const authSummary =
+    selectedCall.requiredScopes.length > 0
+      ? selectedCall.requiredScopes.join(", ")
+      : "OAuth user token via Trading API header (X-EBAY-API-IAF-TOKEN)";
   const environmentBadgeLabel =
     config.environment === "sandbox"
       ? selectedCall.sandboxSupported
@@ -586,6 +595,22 @@ export function EbayWorkbench() {
     setNoticeAlert(null);
 
     try {
+      const nextParams = { ...callValues };
+
+      if (selectedCall.id === "inventory-create-item" && !nextParams.sku?.trim()) {
+        const generatedSku = generateRandomSku();
+        nextParams.sku = generatedSku;
+        setCallValues((current) => ({
+          ...current,
+          sku: generatedSku,
+        }));
+        setNoticeAlert({
+          title: `Generated SKU ${generatedSku} for createOrReplaceInventoryItem.`,
+          detail:
+            "The SKU field was left blank, so the app created one automatically for this request.",
+        });
+      }
+
       const response = await fetch("/api/ebay", {
         method: "POST",
         headers: {
@@ -594,7 +619,7 @@ export function EbayWorkbench() {
         body: JSON.stringify({
           callId: selectedCall.id,
           config,
-          params: callValues,
+          params: nextParams,
         }),
       });
 
@@ -683,12 +708,12 @@ export function EbayWorkbench() {
           <h1>Run seller-facing eBay APIs from one polished control center.</h1>
           <p className="hero__lede">
             Switch between Sandbox and Production, load credentials once per session, and
-            inspect every selected Account, Inventory, Taxonomy, or Fulfillment response as
-            formatted JSON.
+            inspect every selected Account, Inventory, Taxonomy, Fulfillment, or Messaging
+            response as formatted JSON.
           </p>
           <div className="hero__highlights">
             <div className="hero-stat">
-              <strong>4</strong>
+              <strong>5</strong>
               <span>API families wired into one interface</span>
             </div>
             <div className="hero-stat">
@@ -719,6 +744,10 @@ export function EbayWorkbench() {
             <div className="hero__api-item">
               <strong>Fulfillment</strong>
               <span>Orders and shipping status</span>
+            </div>
+            <div className="hero__api-item">
+              <strong>Messaging</strong>
+              <span>Trading inbox retrieval and partner communication</span>
             </div>
           </div>
 
@@ -986,11 +1015,13 @@ export function EbayWorkbench() {
                     </div>
                     <div className="description-meta__item">
                       <span>Scopes</span>
-                      <strong>{selectedCall.requiredScopes.length}</strong>
+                      <strong>
+                        {selectedCall.requiredScopes.length > 0 ? selectedCall.requiredScopes.length : "OAuth"}
+                      </strong>
                     </div>
                     <div className="description-meta__item description-meta__item--wide">
-                      <span>Required scopes</span>
-                      <strong>{selectedCall.requiredScopes.join(", ")}</strong>
+                      <span>Authorization</span>
+                      <strong>{authSummary}</strong>
                     </div>
                   </div>
 
@@ -1030,7 +1061,19 @@ export function EbayWorkbench() {
                       <p>You can run this method immediately with the session credentials above.</p>
                     </div>
                   ) : (
-                    selectedCall.fields.map((field) => (
+                    selectedCall.fields.map((field) => {
+                      const autoGeneratesSku =
+                        selectedCall.id === "inventory-create-item" && field.key === "sku";
+                      const displayField = autoGeneratesSku
+                        ? {
+                            ...field,
+                            required: false,
+                            description:
+                              "Optional. Leave blank to let the app generate a random seller SKU for this request.",
+                          }
+                        : field;
+
+                      return (
                       <label
                         key={field.key}
                         className={`field ${
@@ -1068,17 +1111,18 @@ export function EbayWorkbench() {
                         ) : (
                           <>
                             <span>
-                              {field.label}
-                              {field.required ? " *" : ""}
+                              {displayField.label}
+                              {displayField.required ? " *" : ""}
                             </span>
-                            {fieldInput(field, callValues[field.key] ?? "", (nextValue) =>
+                            {fieldInput(displayField, callValues[field.key] ?? "", (nextValue) =>
                               updateCallValue(field.key, nextValue),
                             )}
-                            <small>{field.description}</small>
+                            <small>{displayField.description}</small>
                           </>
                         )}
                       </label>
-                    ))
+                      );
+                    })
                   )}
                 </div>
 
@@ -1109,6 +1153,21 @@ export function EbayWorkbench() {
                     <p>
                       This is the right fallback for listings that cannot be migrated because they
                       do not have seller-defined SKUs.
+                    </p>
+                  </div>
+                ) : null}
+
+                {selectedCall.id === "messaging-add-member-message-partner" ? (
+                  <div className="insight-card">
+                    <p className="eyebrow">Messaging Constraints</p>
+                    <h4>Partner messaging is a Trading API production flow, not an email API.</h4>
+                    <p>
+                      The recipient must be the buyer or seller’s eBay username or public user ID
+                      for a valid order relationship. An email address will not work in this call.
+                    </p>
+                    <p>
+                      eBay also documents this method as unsupported in Sandbox, so production data
+                      is required for live send testing.
                     </p>
                   </div>
                 ) : null}
@@ -1190,8 +1249,8 @@ export function EbayWorkbench() {
             <p className="eyebrow">eBay API Workbench</p>
             <h2>Seller API tooling in one place.</h2>
             <p>
-              A focused control center for inspecting eBay Account, Inventory, Taxonomy, and
-              Fulfillment API responses with less setup friction.
+              A focused control center for inspecting eBay Account, Inventory, Taxonomy,
+              Fulfillment, and Messaging API responses with less setup friction.
             </p>
           </div>
 
@@ -1213,7 +1272,7 @@ export function EbayWorkbench() {
         </div>
 
         <div className="app-footer__meta">
-          <p>Built with Next.js 16, React 19, TypeScript, Vercel, and eBay REST APIs.</p>
+          <p>Built with Next.js 16, React 19, TypeScript, Vercel, and eBay REST plus Trading APIs.</p>
           <p>&copy; {new Date().getFullYear()} eBay API Workbench</p>
         </div>
       </footer>

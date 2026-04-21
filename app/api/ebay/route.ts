@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 
 import {
   buildRequestBody,
+  buildTradingXmlRequestBody,
   buildRequestUrl,
   getCallDefinition,
   type ApiCallDefinition,
   type EnvironmentConfig,
+  usesTradingXmlProtocol,
 } from "@/lib/ebay-apis";
 
 type ProxyBody = {
@@ -125,6 +127,49 @@ function usesApplicationToken(call: ApiCallDefinition) {
   return call.authFlow === "application";
 }
 
+function extractXmlTagValues(xml: string, tagName: string) {
+  const matcher = new RegExp(`<${tagName}>([\\s\\S]*?)</${tagName}>`, "g");
+  const values: string[] = [];
+
+  for (const match of xml.matchAll(matcher)) {
+    const value = match[1]?.trim();
+    if (value) {
+      values.push(value);
+    }
+  }
+
+  return values;
+}
+
+function extractXmlTagValue(xml: string, tagName: string) {
+  return extractXmlTagValues(xml, tagName)[0];
+}
+
+function parseTradingXmlResponse(rawXml: string) {
+  const errorBlocks = [...rawXml.matchAll(/<Errors>([\s\S]*?)<\/Errors>/g)].map((match) => {
+    const block = match[1] ?? "";
+
+    return {
+      shortMessage: extractXmlTagValue(block, "ShortMessage"),
+      longMessage: extractXmlTagValue(block, "LongMessage"),
+      errorCode: extractXmlTagValue(block, "ErrorCode"),
+      severityCode: extractXmlTagValue(block, "SeverityCode"),
+      errorClassification: extractXmlTagValue(block, "ErrorClassification"),
+    };
+  });
+
+  return {
+    format: "xml" as const,
+    ack: extractXmlTagValue(rawXml, "Ack") ?? null,
+    correlationId: extractXmlTagValue(rawXml, "CorrelationID") ?? null,
+    timestamp: extractXmlTagValue(rawXml, "Timestamp") ?? null,
+    version: extractXmlTagValue(rawXml, "Version") ?? null,
+    build: extractXmlTagValue(rawXml, "Build") ?? null,
+    errors: errorBlocks,
+    rawXml,
+  };
+}
+
 async function getApplicationAccessToken(
   call: ApiCallDefinition,
   config: Partial<EnvironmentConfig>,
@@ -143,8 +188,7 @@ async function getApplicationAccessToken(
   const tokenResponse = await fetch(oauthUrl, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${credentials}`,
-      // Authorization: `Basic ${credentials}`,
+      Authorization: `Basic ${credentials}`,
       "Content-Type": "application/x-www-form-urlencoded",
       Accept: "application/json",
     },
@@ -198,10 +242,6 @@ export async function POST(request: NextRequest) {
 
   const config = resolveConfig(body.config);
 
-  if (!usesApplicationToken(call) && !normalizeAccessToken(config.userAccessToken ?? "")) {
-    return errorResponse("A USER_ACCESS_TOKEN is required to call the eBay APIs.");
-  }
-
   const requestLocale = config.requestLocale?.trim() || "en-US";
   if (!/^[a-z]{2}-[A-Z]{2}$/.test(requestLocale)) {
     return errorResponse(
@@ -213,6 +253,10 @@ export async function POST(request: NextRequest) {
     return errorResponse(
       `${call.title} is documented by eBay as unsupported in Sandbox.`,
     );
+  }
+
+  if (!usesApplicationToken(call) && !normalizeAccessToken(config.userAccessToken ?? "")) {
+    return errorResponse("A USER_ACCESS_TOKEN is required to call the eBay APIs.");
   }
 
   const params = body.params ?? {};
@@ -227,7 +271,9 @@ export async function POST(request: NextRequest) {
 
   let requestBody: unknown;
   try {
-    requestBody = buildRequestBody(call, params);
+    requestBody = usesTradingXmlProtocol(call)
+      ? buildTradingXmlRequestBody(call, params, requestLocale)
+      : buildRequestBody(call, params);
   } catch (error) {
     return errorResponse(
       error instanceof Error ? error.message : "Unable to parse the request body.",
@@ -247,18 +293,32 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const headers = new Headers({
-      Accept: "application/json",
-      Authorization: `Bearer ${accessToken}`,
-      "Accept-Language": requestLocale,
-      "Content-Language": requestLocale,
-    });
+    const headers = usesTradingXmlProtocol(call)
+      ? new Headers({
+          Accept: "application/xml",
+          "Content-Type": "text/xml; charset=utf-8",
+          "X-EBAY-API-CALL-NAME": call.tradingCallName ?? call.title,
+          "X-EBAY-API-COMPATIBILITY-LEVEL":
+            call.tradingCompatibilityLevel ?? "1451",
+          "X-EBAY-API-SITEID": call.tradingSiteId ?? "0",
+          "X-EBAY-API-IAF-TOKEN": accessToken,
+        })
+      : new Headers({
+          Accept: "application/json",
+          Authorization: `Bearer ${accessToken}`,
+          "Accept-Language": requestLocale,
+          "Content-Language": requestLocale,
+        });
 
-    if (requestBody !== undefined && (call.method === "POST" || call.method === "PUT")) {
+    if (
+      !usesTradingXmlProtocol(call) &&
+      requestBody !== undefined &&
+      (call.method === "POST" || call.method === "PUT")
+    ) {
       headers.set("Content-Type", "application/json");
     }
 
-    if (call.id === "browse-get-item-by-legacy-id") {
+    if (!usesTradingXmlProtocol(call) && call.id === "browse-get-item-by-legacy-id") {
       headers.set(
         "X-EBAY-C-MARKETPLACE-ID",
         params.marketplace_id?.trim() || "EBAY_US",
@@ -270,32 +330,47 @@ export async function POST(request: NextRequest) {
       headers,
       body:
         requestBody !== undefined && (call.method === "POST" || call.method === "PUT")
-          ? JSON.stringify(requestBody)
+          ? usesTradingXmlProtocol(call)
+            ? String(requestBody)
+            : JSON.stringify(requestBody)
           : undefined,
       cache: "no-store",
     });
 
     const rawText = await ebayResponse.text();
-    let data: unknown = null;
-
-    if (rawText) {
-      try {
-        data = JSON.parse(rawText);
-      } catch {
-        data = { raw: rawText };
-      }
-    }
+    const data: unknown = usesTradingXmlProtocol(call)
+      ? parseTradingXmlResponse(rawText)
+      : rawText
+        ? (() => {
+            try {
+              return JSON.parse(rawText);
+            } catch {
+              return { raw: rawText };
+            }
+          })()
+        : null;
+    const tradingAck =
+      usesTradingXmlProtocol(call) &&
+      data &&
+      typeof data === "object" &&
+      "ack" in data &&
+      typeof data.ack === "string"
+        ? data.ack
+        : null;
+    const isSuccessfulTradingAck =
+      tradingAck === null || tradingAck === "Success" || tradingAck === "Warning";
+    const isProxySuccess = ebayResponse.ok && isSuccessfulTradingAck;
 
     return NextResponse.json(
       {
-        ok: ebayResponse.ok,
+        ok: isProxySuccess,
         status: ebayResponse.status,
         statusText: ebayResponse.statusText,
         requestUrl: requestUrl.toString(),
         data,
       },
       {
-        status: ebayResponse.ok ? 200 : ebayResponse.status,
+        status: isProxySuccess ? 200 : ebayResponse.ok ? 400 : ebayResponse.status,
       },
     );
   } catch (error) {

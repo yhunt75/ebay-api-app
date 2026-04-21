@@ -6,10 +6,12 @@ export type ApiFamilyId =
   | "inventory"
   | "taxonomy"
   | "fulfillment"
-  | "browse";
+  | "browse"
+  | "messaging";
 export type ApiFieldLocation = "path" | "query" | "body" | "header";
 export type ApiFieldType = "text" | "textarea" | "number";
 export type ApiHttpMethod = "GET" | "POST" | "PUT" | "DELETE";
+export type ApiProtocol = "rest" | "tradingXml";
 
 export type EnvironmentConfig = {
   environment: EbayEnvironment;
@@ -41,10 +43,14 @@ export type ApiCallDefinition = {
   docsUrl: string;
   path: string;
   method: ApiHttpMethod;
+  protocol?: ApiProtocol;
   apiHost?: ApiHostId;
   authFlow?: ApiAuthFlow;
   sandboxSupported: boolean;
   requiredScopes: string[];
+  tradingCallName?: string;
+  tradingCompatibilityLevel?: string;
+  tradingSiteId?: string;
   notes?: string[];
   fields: ApiFieldDefinition[];
 };
@@ -235,6 +241,8 @@ const ISSUE_REFUND_BODY_TEMPLATE = `{
   "comment": "Test refund payload"
 }`;
 
+const TRADING_COMPATIBILITY_LEVEL = "1451";
+
 export const API_FAMILIES: Array<{
   id: ApiFamilyId;
   label: string;
@@ -265,6 +273,12 @@ export const API_FAMILIES: Array<{
     label: "Browse API",
     description:
       "Look up legacy eBay listing IDs directly when a listing is not yet managed by the Inventory API.",
+  },
+  {
+    id: "messaging",
+    label: "Messaging API",
+    description:
+      "Work with Trading API member messages for inbox retrieval and buyer or bidder communication flows.",
   },
 ];
 
@@ -1314,10 +1328,256 @@ export const API_CALLS: ApiCallDefinition[] = [
       },
     ],
   },
+  {
+    id: "messaging-get-member-messages",
+    apiFamily: "messaging",
+    title: "GetMemberMessages",
+    summary:
+      "Retrieve buyer-to-seller member messages tied to active listings, with filters for unanswered questions and time windows.",
+    docsUrl:
+      "https://developer.ebay.com/devzone/XML/docs/Reference/ebay/GetMemberMessages.html",
+    path: "/ws/api.dll",
+    method: "POST",
+    protocol: "tradingXml",
+    sandboxSupported: true,
+    requiredScopes: [],
+    tradingCallName: "GetMemberMessages",
+    tradingCompatibilityLevel: TRADING_COMPATIBILITY_LEVEL,
+    tradingSiteId: "0",
+    notes: [
+      "For Ask Seller Question traffic, eBay requires either ItemID or a StartCreationTime and EndCreationTime range.",
+      "Use pagination and narrow time filters to reduce duplicate polling and large result sets.",
+      "As of September 26, 2025, eBay accepts either usernames or public user IDs in supported recipient and sender fields.",
+    ],
+    fields: [
+      {
+        key: "mailMessageType",
+        label: "Mail Message Type",
+        location: "body",
+        required: true,
+        defaultValue: "AskSellerQuestion",
+        placeholder: "AskSellerQuestion",
+        description: "Use AskSellerQuestion for listing questions or All when retrieving a broader date-ranged message set.",
+      },
+      {
+        key: "itemId",
+        label: "Item ID",
+        location: "body",
+        placeholder: "318101253980",
+        description: "Optional listing ID. Required unless you provide both StartCreationTime and EndCreationTime for AskSellerQuestion retrieval.",
+      },
+      {
+        key: "messageStatus",
+        label: "Message Status",
+        location: "body",
+        defaultValue: "Unanswered",
+        placeholder: "Unanswered",
+        description: "Optional filter such as Unanswered or Answered.",
+      },
+      {
+        key: "senderId",
+        label: "Sender ID",
+        location: "body",
+        placeholder: "buyer-public-user-id",
+        description: "Optional sender filter using an eBay username or public user ID.",
+      },
+      {
+        key: "startCreationTime",
+        label: "Start Creation Time",
+        location: "body",
+        placeholder: "2026-04-20T00:00:00.000Z",
+        description: "Optional ISO 8601 UTC timestamp. Pair with EndCreationTime when polling incrementally.",
+      },
+      {
+        key: "endCreationTime",
+        label: "End Creation Time",
+        location: "body",
+        placeholder: "2026-04-21T23:59:59.000Z",
+        description: "Optional ISO 8601 UTC timestamp. Required whenever StartCreationTime is used.",
+      },
+      {
+        key: "entriesPerPage",
+        label: "Entries Per Page",
+        location: "body",
+        type: "number",
+        defaultValue: "25",
+        placeholder: "25",
+        description: "Valid values are 25, 50, 100, or 200.",
+      },
+      {
+        key: "pageNumber",
+        label: "Page Number",
+        location: "body",
+        type: "number",
+        defaultValue: "1",
+        placeholder: "1",
+        description: "The results page to retrieve.",
+      },
+      {
+        key: "displayToPublic",
+        label: "Display To Public",
+        location: "body",
+        defaultValue: "false",
+        placeholder: "false",
+        description: "Optional boolean string. Use true to return only public listing questions.",
+      },
+    ],
+  },
+  {
+    id: "messaging-get-my-messages",
+    apiFamily: "messaging",
+    title: "GetMyMessages",
+    summary:
+      "Retrieve the authenticated user’s My Messages inbox headers or full message bodies through the Trading API.",
+    docsUrl:
+      "https://developer.ebay.com/devzone/xml/docs/Reference/ebay/GetMyMessages.html",
+    path: "/ws/api.dll",
+    method: "POST",
+    protocol: "tradingXml",
+    sandboxSupported: true,
+    requiredScopes: [],
+    tradingCallName: "GetMyMessages",
+    tradingCompatibilityLevel: TRADING_COMPATIBILITY_LEVEL,
+    tradingSiteId: "0",
+    notes: [
+      "eBay recommends starting with DetailLevel ReturnHeaders for maximum efficiency before requesting full message bodies.",
+      "Flagged messages are intended to be acted on promptly in the seller’s My Messages inbox.",
+      "Trading API OAuth does not use REST sell.* scopes; it uses the user access token through X-EBAY-API-IAF-TOKEN.",
+    ],
+    fields: [
+      {
+        key: "detailLevel",
+        label: "Detail Level",
+        location: "body",
+        required: true,
+        defaultValue: "ReturnHeaders",
+        placeholder: "ReturnHeaders",
+        description: "Use ReturnHeaders for efficient polling or ReturnMessages when you need full message bodies.",
+      },
+      {
+        key: "folderId",
+        label: "Folder ID",
+        location: "body",
+        placeholder: "0",
+        description: "Optional folder filter for the user’s My Messages mailbox.",
+      },
+      {
+        key: "startTime",
+        label: "Start Time",
+        location: "body",
+        placeholder: "2026-04-20T00:00:00.000Z",
+        description: "Optional ISO 8601 UTC timestamp to retrieve newer messages incrementally.",
+      },
+      {
+        key: "endTime",
+        label: "End Time",
+        location: "body",
+        placeholder: "2026-04-21T23:59:59.000Z",
+        description: "Optional ISO 8601 UTC timestamp. Pair with StartTime when filtering by time.",
+      },
+      {
+        key: "entriesPerPage",
+        label: "Entries Per Page",
+        location: "body",
+        type: "number",
+        defaultValue: "25",
+        placeholder: "25",
+        description: "How many messages to return per page.",
+      },
+      {
+        key: "pageNumber",
+        label: "Page Number",
+        location: "body",
+        type: "number",
+        defaultValue: "1",
+        placeholder: "1",
+        description: "The results page to retrieve.",
+      },
+    ],
+  },
+  {
+    id: "messaging-add-member-message-partner",
+    apiFamily: "messaging",
+    title: "AddMemberMessageAAQToPartner",
+    summary:
+      "Send a Trading API member message to an order partner for a listing tied to an order relationship.",
+    docsUrl:
+      "https://developer.ebay.com/devzone/xml/docs/Reference/ebay/AddMemberMessageAAQToPartner.html",
+    path: "/ws/api.dll",
+    method: "POST",
+    protocol: "tradingXml",
+    sandboxSupported: false,
+    requiredScopes: [],
+    tradingCallName: "AddMemberMessageAAQToPartner",
+    tradingCompatibilityLevel: TRADING_COMPATIBILITY_LEVEL,
+    tradingSiteId: "0",
+    notes: [
+      "This call is not supported in Sandbox and can only be tested against Production data.",
+      "The recipient must be an eBay username or public user ID in an order relationship with the authenticated user. The API does not accept an email address as the recipient.",
+      "eBay disallows HTML in the message body and limits this call to 75 requests per 60 seconds per seller account.",
+      "Buyer and seller order partners can message each other for up to 90 days after the order line item was created.",
+    ],
+    fields: [
+      {
+        key: "itemId",
+        label: "Item ID",
+        location: "body",
+        required: true,
+        placeholder: "318101253980",
+        description: "The listing ID associated with the order relationship.",
+      },
+      {
+        key: "recipientId",
+        label: "Recipient ID",
+        location: "body",
+        required: true,
+        placeholder: "buyer-public-user-id",
+        description: "The buyer or seller’s eBay username or public user ID. Email addresses are not supported here.",
+      },
+      {
+        key: "subject",
+        label: "Subject",
+        location: "body",
+        required: true,
+        placeholder: "Order update",
+        description: "The subject shown in My eBay messaging.",
+      },
+      {
+        key: "bodyText",
+        label: "Message Body",
+        location: "body",
+        type: "textarea",
+        required: true,
+        placeholder: "Thanks for your purchase. Your order is being prepared for shipment.",
+        description: "Plain text only. eBay rejects HTML markup in this field.",
+      },
+      {
+        key: "questionType",
+        label: "Question Type",
+        location: "body",
+        required: true,
+        defaultValue: "General",
+        placeholder: "General",
+        description: "Use a supported Trading API question type such as General, Payment, or Shipping.",
+      },
+      {
+        key: "emailCopyToSender",
+        label: "Email Copy To Sender",
+        location: "body",
+        defaultValue: "false",
+        placeholder: "false",
+        description: "Optional boolean string. Use true to email a copy back to the authenticated sender.",
+      },
+    ],
+  },
 ];
 
 export function getCallDefinition(callId: string) {
   return API_CALLS.find((call) => call.id === callId);
+}
+
+export function usesTradingXmlProtocol(call: ApiCallDefinition) {
+  return call.protocol === "tradingXml";
 }
 
 export function getCallDefaults(call: ApiCallDefinition) {
@@ -1331,6 +1591,10 @@ export function buildRequestUrl(
   environment: EbayEnvironment,
   params: Record<string, string>,
 ) {
+  if (usesTradingXmlProtocol(call)) {
+    return new URL(`${EBAY_BASE_URLS.api[environment]}${call.path}`);
+  }
+
   let path = call.path;
 
   for (const field of call.fields.filter((entry) => entry.location === "path")) {
@@ -1355,6 +1619,10 @@ export function buildRequestBody(
   call: ApiCallDefinition,
   params: Record<string, string>,
 ) {
+  if (usesTradingXmlProtocol(call)) {
+    return undefined;
+  }
+
   if (call.id === "inventory-bulk-migrate-listing") {
     const listingIds = (params.listingIds ?? "")
       .split(/[\s,]+/)
@@ -1390,4 +1658,132 @@ export function buildRequestBody(
   return Object.fromEntries(
     bodyFields.map((field) => [field.key, params[field.key]?.trim() ?? ""]),
   );
+}
+
+function xmlEscape(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function maybeXmlTag(tagName: string, value?: string) {
+  const normalizedValue = value?.trim();
+  if (!normalizedValue) {
+    return "";
+  }
+
+  return `<${tagName}>${xmlEscape(normalizedValue)}</${tagName}>`;
+}
+
+function maybeXmlBooleanTag(tagName: string, value?: string) {
+  const normalizedValue = value?.trim().toLowerCase();
+  if (!normalizedValue) {
+    return "";
+  }
+
+  if (!["true", "false"].includes(normalizedValue)) {
+    throw new Error(`${tagName} must be the string true or false for this Trading API call.`);
+  }
+
+  return `<${tagName}>${normalizedValue}</${tagName}>`;
+}
+
+function buildTradingMessageId(call: ApiCallDefinition) {
+  const compactTimestamp = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
+  return `workbench-${call.tradingCallName?.toLowerCase() ?? call.id}-${compactTimestamp}`;
+}
+
+function toTradingErrorLanguage(requestLocale: string) {
+  const normalizedLocale = requestLocale.trim() || "en-US";
+  return normalizedLocale.replace("-", "_");
+}
+
+export function buildTradingXmlRequestBody(
+  call: ApiCallDefinition,
+  params: Record<string, string>,
+  requestLocale: string,
+) {
+  const messageId = buildTradingMessageId(call);
+  const errorLanguage = toTradingErrorLanguage(requestLocale);
+
+  if (call.id === "messaging-get-member-messages") {
+    const mailMessageType = params.mailMessageType?.trim() || "AskSellerQuestion";
+    const itemId = params.itemId?.trim() || "";
+    const startCreationTime = params.startCreationTime?.trim() || "";
+    const endCreationTime = params.endCreationTime?.trim() || "";
+    const messageStatus = params.messageStatus?.trim() || "";
+    const senderId = params.senderId?.trim() || "";
+    const entriesPerPage = params.entriesPerPage?.trim() || "";
+    const pageNumber = params.pageNumber?.trim() || "";
+
+    if (mailMessageType === "All" && (!startCreationTime || !endCreationTime)) {
+      throw new Error(
+        "GetMemberMessages requires both Start Creation Time and End Creation Time when Mail Message Type is All.",
+      );
+    }
+
+    if (
+      mailMessageType === "AskSellerQuestion" &&
+      !itemId &&
+      (!startCreationTime || !endCreationTime)
+    ) {
+      throw new Error(
+        "GetMemberMessages requires Item ID or both Start Creation Time and End Creation Time for AskSellerQuestion retrieval.",
+      );
+    }
+
+    return `<?xml version="1.0" encoding="utf-8"?>
+<GetMemberMessagesRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  ${maybeXmlTag("ErrorLanguage", errorLanguage)}
+  ${maybeXmlTag("MessageID", messageId)}
+  <MailMessageType>${xmlEscape(mailMessageType)}</MailMessageType>
+  ${maybeXmlTag("ItemID", itemId)}
+  ${maybeXmlTag("MessageStatus", messageStatus)}
+  ${maybeXmlTag("SenderID", senderId)}
+  ${maybeXmlTag("StartCreationTime", startCreationTime)}
+  ${maybeXmlTag("EndCreationTime", endCreationTime)}
+  ${maybeXmlBooleanTag("DisplayToPublic", params.displayToPublic)}
+  <Pagination>
+    <EntriesPerPage>${xmlEscape(entriesPerPage || "25")}</EntriesPerPage>
+    <PageNumber>${xmlEscape(pageNumber || "1")}</PageNumber>
+  </Pagination>
+</GetMemberMessagesRequest>`;
+  }
+
+  if (call.id === "messaging-get-my-messages") {
+    return `<?xml version="1.0" encoding="utf-8"?>
+<GetMyMessagesRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  ${maybeXmlTag("ErrorLanguage", errorLanguage)}
+  ${maybeXmlTag("MessageID", messageId)}
+  <DetailLevel>${xmlEscape(params.detailLevel?.trim() || "ReturnHeaders")}</DetailLevel>
+  ${maybeXmlTag("FolderID", params.folderId)}
+  ${maybeXmlTag("StartTime", params.startTime)}
+  ${maybeXmlTag("EndTime", params.endTime)}
+  <Pagination>
+    <EntriesPerPage>${xmlEscape(params.entriesPerPage?.trim() || "25")}</EntriesPerPage>
+    <PageNumber>${xmlEscape(params.pageNumber?.trim() || "1")}</PageNumber>
+  </Pagination>
+</GetMyMessagesRequest>`;
+  }
+
+  if (call.id === "messaging-add-member-message-partner") {
+    return `<?xml version="1.0" encoding="utf-8"?>
+<AddMemberMessageAAQToPartnerRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  ${maybeXmlTag("ErrorLanguage", errorLanguage)}
+  ${maybeXmlTag("MessageID", messageId)}
+  <ItemID>${xmlEscape(params.itemId?.trim() || "")}</ItemID>
+  <MemberMessage>
+    <Subject>${xmlEscape(params.subject?.trim() || "")}</Subject>
+    <Body>${xmlEscape(params.bodyText?.trim() || "")}</Body>
+    <QuestionType>${xmlEscape(params.questionType?.trim() || "General")}</QuestionType>
+    <RecipientID>${xmlEscape(params.recipientId?.trim() || "")}</RecipientID>
+    ${maybeXmlBooleanTag("EmailCopyToSender", params.emailCopyToSender)}
+  </MemberMessage>
+</AddMemberMessageAAQToPartnerRequest>`;
+  }
+
+  throw new Error(`Trading XML request builder is not configured for ${call.title}.`);
 }
